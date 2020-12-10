@@ -25,20 +25,33 @@ class Color(Enum):# (R, Y, B)
         if all(c1 + c2 > 0 for c1, c2 in zip(self.value, other.value)):
             return Color.BROWN
         
-        if self.adjacent(other):    # return the tertiary one
+        if False and self.adjacent(other):    # return the tertiary one
             return self if 1 in self.value else other
         else:                       # average RYB components
-            return Color(tuple(
+            midpoint = [
                 (c1 + c2) // 2 for c1, c2 in zip(self.value, other.value)
-            ))
+            ]
+            if sum(midpoint) < 4:   # colors do not have a perfect midpoint; shift towards tertiary
+                midpoint[max([0, 1, 2], key=lambda i: midpoint[i])] += 1
+            return Color(tuple(midpoint))
+
+
 
 
 assert(Color.RED + Color.YELLOW is Color.ORANGE)
 assert(Color.RED + Color.GREEN is Color.BROWN)
-for c in Color:
-    assert(c + c is c)
 assert(Color.RED_VIOLET + Color.VIOLET is Color.RED_VIOLET)
 assert(Color.VIOLET + Color.RED_VIOLET is Color.RED_VIOLET)
+assert(Color.BLUE + Color.YELLOW_GREEN is Color.BLUE_GREEN)
+
+for c in Color:
+    assert(c + c is c)
+
+for c1 in Color:
+    for c2 in Color:
+        print(f"{c1} + {c2} = {c1 + c2}")
+        assert(c1 + c2 in Color)        # closed
+        assert(c1 + c2 is c2 + c1)      # commutative
 
 
 # TODO in `main.py`, something like this:
