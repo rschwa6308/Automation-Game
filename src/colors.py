@@ -25,7 +25,7 @@ class Color(Enum):# (R, Y, B)
         if all(c1 + c2 > 0 for c1, c2 in zip(self.value, other.value)):
             return Color.BROWN
         
-        if False and self.adjacent(other):    # return the tertiary one
+        if self.adjacent(other):    # return the tertiary one
             return self if 1 in self.value else other
         else:                       # average RYB components
             midpoint = [
