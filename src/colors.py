@@ -38,20 +38,23 @@ class Color(Enum):# (R, Y, B)
 
 
 
-assert(Color.RED + Color.YELLOW is Color.ORANGE)
-assert(Color.RED + Color.GREEN is Color.BROWN)
-assert(Color.RED_VIOLET + Color.VIOLET is Color.RED_VIOLET)
-assert(Color.VIOLET + Color.RED_VIOLET is Color.RED_VIOLET)
-assert(Color.BLUE + Color.YELLOW_GREEN is Color.BLUE_GREEN)
+if __name__ == "__main__":
+    assert(Color.RED + Color.BLUE is Color.VIOLET)
+    assert(Color.RED + Color.RED_ORANGE is Color.RED_ORANGE)
+    assert(Color.RED + Color.YELLOW is Color.ORANGE)
+    assert(Color.RED + Color.GREEN is Color.BROWN)
+    assert(Color.RED_VIOLET + Color.VIOLET is Color.RED_VIOLET)
+    assert(Color.VIOLET + Color.RED_VIOLET is Color.RED_VIOLET)
+    assert(Color.BLUE + Color.YELLOW_GREEN is Color.BLUE_GREEN)
 
-for c in Color:
-    assert(c + c is c)
+    for c in Color:
+        assert(c + c is c)
 
-for c1 in Color:
-    for c2 in Color:
-        print(f"{c1} + {c2} = {c1 + c2}")
-        assert(c1 + c2 in Color)        # closed
-        assert(c1 + c2 is c2 + c1)      # commutative
+    for c1 in Color:
+        for c2 in Color:
+            # print(f"{c1} + {c2} = {c1 + c2}")
+            assert(c1 + c2 in Color)        # closed
+            assert(c1 + c2 is c2 + c1)      # commutative
 
 
 # TODO in `main.py`, something like this:
