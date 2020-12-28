@@ -36,8 +36,6 @@ class Color(Enum):# (R, Y, B)
             return Color(tuple(midpoint))
 
 
-
-
 if __name__ == "__main__":
     assert(Color.RED + Color.BLUE is Color.VIOLET)
     assert(Color.RED + Color.RED_ORANGE is Color.RED_ORANGE)
