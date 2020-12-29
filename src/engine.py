@@ -1,5 +1,5 @@
 # --- Internal Level Representation and Gamerules --- #
-from typing import Collection, Mapping, Sequence
+from typing import Collection, Mapping, Tuple, Sequence
 from functools import reduce
 
 from entities import *
@@ -8,7 +8,7 @@ from helpers import V2
 
 class Board:
     """a hashing based sparse-matrix representation of an infinite 2D game board"""
-    board_type = Mapping[V2, Collection[Entity]]
+    board_type = Mapping[Tuple[int, int], Collection[Entity]]
 
     def __init__(self, cells: board_type = {}):
         if not all(all(isinstance(e, Entity) for e in cell) for cell in cells.values()):
@@ -16,9 +16,9 @@ class Board:
 
         self.cells = cells
     
-    def get(self, pos):
-        if pos in self.cells:
-            return tuple(self.cells[pos])   # return an immutable type
+    def get(self, x, y):
+        if (x, y) in self.cells:
+            return tuple(self.cells[(x, y)])   # return an immutable type
         else:
             return tuple()
     
@@ -37,14 +37,14 @@ class Board:
     def get_all(self):
         for pos, cell in self.cells.items():
             for e in cell:
-                yield pos, e
+                yield V2(*pos), e
     
-    def get_grid(self) -> Sequence[Sequence[Collection[Entity]]]:
-        """compute minimal dense-matrix representation"""
-        min_x = min(pos.x for pos in self.cells)
-        max_x = max(pos.x for pos in self.cells)
-        min_y = min(pos.y for pos in self.cells)
-        max_y = max(pos.y for pos in self.cells)
+    def get_grid(self, margin=0) -> Sequence[Sequence[Collection[Entity]]]:
+        """compute minimal dense-matrix representation (with margin)"""
+        min_x = min(pos[0] for pos in self.cells) - margin
+        max_x = max(pos[0] for pos in self.cells) + margin
+        min_y = min(pos[1] for pos in self.cells) - margin
+        max_y = max(pos[1] for pos in self.cells) + margin
 
         width = max_x - min_x + 1
         height = max_y - min_y + 1
@@ -53,12 +53,21 @@ class Board:
 
         for x in range(width):
             for y in range(height):
-                pos = V2(min_x + x, min_y + y)
-                print(pos)
-                grid[y][x] = self.get(pos)
+                pos = (min_x + x, min_y + y)
+                grid[y][x] = self.get(*pos)
         
         return grid
 
+    def __str__(self):
+        def get_ascii_str(cell):
+            return "".join(e.ascii_str for e in cell).rjust(2, ".")
+        
+        grid = self.get_grid(margin=1)
+
+        return "\n".join(
+            " ".join(get_ascii_str(cell) for cell in row)
+            for row in grid[::-1]     # flip y-axis
+        )
 
 
 
@@ -73,58 +82,14 @@ class Level:
         if board is None:
             board = Board()
 
-        # self.width = len(board[0])
-        # self.height = len(board)
         self.board = board
-
-        # if not all(len(row) == self.width for row in board):
-        #     raise ValueError("Invalid board shape; board must be rectangular.")
-            
-        # if not all(isinstance(e, Entity) for _, e in self.get_entities()):
-        #     raise ValueError("Invalid board contents; board can only contain Entities.")
     
     def __str__(self):
-        def get_ascii_str(cell):
-            return "".join(e.ascii_str for e in cell).rjust(2, ".")
-
-        return "\n".join(
-            " ".join(get_ascii_str(cell) for cell in row)
-            for row in self.board[::-1]     # flip y-axis
-        )
-    
-    # def get_cell_at(self, x, y):
-    #     return self.board[y][x]
-    
-    # def remove_at(self, x, y, *entities):
-    #     cell = self.get_cell_at(x, y)
-    #     for e in entities:
-    #         cell.remove(e)
-    
-    # def append_at(self, x, y, *entities):
-    #     cell = self.get_cell_at(x, y)
-    #     for e in entities:
-    #         cell.append(e)
-    
-    # def get_cells(self):
-    #     for x in range(self.width):
-    #         for y in range(self.height):
-    #             cell = self.get_cell_at(x, y)
-    #             yield V2(x, y), cell
-    
-    # def get_entities(self):
-    #     for pos, cell in self.get_cells():
-    #         for e in cell:
-    #             yield pos, e
-    
-    def is_in_bounds(self, coords):
-        return 0 <= coords[0] < self.width and 0 <= coords[1] < self.height
+        return str(self.board)
     
     # Returns true iff the given coords are in bounds and the corresponding tile does not contain a `stops` Entity
     def is_walkable(self, coords):
-        if not self.is_in_bounds(coords):
-            return False
-        
-        cell = self.get_cell_at(*coords)
+        cell = self.board.get(*coords)
         return not any(e.stops for e in cell)
     
     def step(self):
@@ -166,15 +131,12 @@ from pprint import pprint
 if __name__ == "__main__":
 
     test_board = Board({
-        V2(3, 3): [ResourceTile(Color.RED)],
-        V2(3, 3): [ResourceExtractor()],
-        V2(5, 4): [Barrel(Color.RED, Direction.EAST)],
-        V2(8, 7): [Barrel(Color.YELLOW, Direction.SOUTH)]
+        (3, 3): [ResourceTile(Color.RED)],
+        (3, 3): [ResourceExtractor()],
+        (5, 4): [Barrel(Color.RED, Direction.EAST)],
+        (8, 7): [Barrel(Color.YELLOW, Direction.SOUTH)]
     })
 
-
-    print(test_board.get(V2(3, 3)))     # TODO: debug this
-    pprint(test_board.get_grid())
     test_level = Level(test_board)
 
     for _ in range(10):
