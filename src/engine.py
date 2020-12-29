@@ -1,5 +1,5 @@
 # --- Internal Level Representation and Gamerules --- #
-from typing import Sequence, Tuple, Union
+from typing import Sequence
 from functools import reduce
 
 from entities import *
