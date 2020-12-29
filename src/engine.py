@@ -1,41 +1,87 @@
 # --- Internal Level Representation and Gamerules --- #
-from typing import Sequence
+from typing import Collection, Mapping, Sequence
 from functools import reduce
 
 from entities import *
 from helpers import V2
 
 
+class Board:
+    """a hashing based sparse-matrix representation of an infinite 2D game board"""
+    board_type = Mapping[V2, Collection[Entity]]
+
+    def __init__(self, cells: board_type = {}):
+        if not all(all(isinstance(e, Entity) for e in cell) for cell in cells.values()):
+            raise ValueError("Invalid board contents; cells can only contain `Entity`s")
+
+        self.cells = cells
+    
+    def get(self, pos):
+        if pos in self.cells:
+            return tuple(self.cells[pos])   # return an immutable type
+        else:
+            return tuple()
+    
+    def insert(self, pos, *entities):
+        if pos not in self.cells:
+            self.cells[pos] = []
+        self.cells[pos].extend(entities)
+    
+    def remove(self, pos, *entities):
+        if pos not in self.cells or any(e not in self.cells[pos] for e in entities):
+            raise ValueError(f"Cannot remove non-present entities (at pos {pos})")
+        
+        for e in entities:
+            self.cells[pos].remove(e)
+    
+    def get_all(self):
+        for pos, cell in self.cells.items():
+            for e in cell:
+                yield pos, e
+    
+    def get_grid(self) -> Sequence[Sequence[Collection[Entity]]]:
+        """compute minimal dense-matrix representation"""
+        min_x = min(pos.x for pos in self.cells)
+        max_x = max(pos.x for pos in self.cells)
+        min_y = min(pos.y for pos in self.cells)
+        max_y = max(pos.y for pos in self.cells)
+
+        width = max_x - min_x + 1
+        height = max_y - min_y + 1
+
+        grid = [[None for _ in range(width)] for _ in range(height)]
+
+        for x in range(width):
+            for y in range(height):
+                pos = V2(min_x + x, min_y + y)
+                print(pos)
+                grid[y][x] = self.get(pos)
+        
+        return grid
+
+
+
+
 class Level:
     default_width = 10
     default_height = 8
 
-    board_type = Sequence[Sequence[Sequence[Entity]]]
-
-    @staticmethod
-    def get_empty_board(width, height) -> board_type:
-        return [
-            [[] for _ in range(width)]
-            for _ in range(height)
-        ]
-
-
     def __init__(
         self,
-        board: board_type = None
+        board: Board = None
     ):
         if board is None:
-            board = Level.get_empty_board(self.default_width, self.default_height)
+            board = Board()
 
-        self.width = len(board[0])
-        self.height = len(board)
+        # self.width = len(board[0])
+        # self.height = len(board)
         self.board = board
 
-        if not all(len(row) == self.width for row in board):
-            raise ValueError("Invalid board shape; board must be rectangular.")
+        # if not all(len(row) == self.width for row in board):
+        #     raise ValueError("Invalid board shape; board must be rectangular.")
             
-        if not all(isinstance(e, Entity) for _, e in self.get_entities()):
-            raise ValueError("Invalid board contents; board can only contain Entities.")
+        # if not all(isinstance(e, Entity) for _, e in self.get_entities()):
+        #     raise ValueError("Invalid board contents; board can only contain Entities.")
     
     def __str__(self):
         def get_ascii_str(cell):
@@ -46,29 +92,29 @@ class Level:
             for row in self.board[::-1]     # flip y-axis
         )
     
-    def get_cell_at(self, x, y):
-        return self.board[y][x]
+    # def get_cell_at(self, x, y):
+    #     return self.board[y][x]
     
-    def remove_at(self, x, y, *entities):
-        cell = self.get_cell_at(x, y)
-        for e in entities:
-            cell.remove(e)
+    # def remove_at(self, x, y, *entities):
+    #     cell = self.get_cell_at(x, y)
+    #     for e in entities:
+    #         cell.remove(e)
     
-    def append_at(self, x, y, *entities):
-        cell = self.get_cell_at(x, y)
-        for e in entities:
-            cell.append(e)
+    # def append_at(self, x, y, *entities):
+    #     cell = self.get_cell_at(x, y)
+    #     for e in entities:
+    #         cell.append(e)
     
-    def get_cells(self):
-        for x in range(self.width):
-            for y in range(self.height):
-                cell = self.get_cell_at(x, y)
-                yield V2(x, y), cell
+    # def get_cells(self):
+    #     for x in range(self.width):
+    #         for y in range(self.height):
+    #             cell = self.get_cell_at(x, y)
+    #             yield V2(x, y), cell
     
-    def get_entities(self):
-        for pos, cell in self.get_cells():
-            for e in cell:
-                yield pos, e
+    # def get_entities(self):
+    #     for pos, cell in self.get_cells():
+    #         for e in cell:
+    #             yield pos, e
     
     def is_in_bounds(self, coords):
         return 0 <= coords[0] < self.width and 0 <= coords[1] < self.height
@@ -96,38 +142,39 @@ class Level:
         # apply others (?)
 
     def apply_translations(self):
-        for pos, e in list(self.get_entities()):    # list() avoids concurrent modification
+        for pos, e in list(self.board.get_all()):       # list() avoids concurrent modification
             if e.moves:
                 dest = pos + e.velocity
                 if self.is_walkable(dest):
                     # move the entity to the dest
-                    self.remove_at(*pos, e)
-                    self.append_at(*dest, e)
-                    # self.get_cell_at(*pos).remove(e)
-                    # self.get_cell_at(*dest).append(e)
+                    self.board.remove(pos, e)
+                    self.board.insert(dest, e)
 
     def apply_merges(self):
-        for pos, cell in self.get_cells():
+        for pos, cell in list(self.board.get_all()):    #  list() avoids concurrent modification
             mergable = [e for e in cell if e.merges]
             if len(mergable) > 1:
                 # merge repeatably
                 res = reduce(lambda a, b: a + b, mergable[1:], mergable[0])
-                self.remove_at(*pos, *mergable)
-                self.append_at(*pos, res)
-
-            
-
-            
+                self.board.remove(pos, *mergable)
+                self.board.insert(pos, res)
 
 
 from time import sleep
+from pprint import pprint
 
 if __name__ == "__main__":
-    test_board = Level.get_empty_board(15, 8)
-    test_board[3][3].append(ResourceTile(Color.RED))
-    test_board[3][3].append(ResourceExtractor())
-    test_board[4][5].append(Barrel(Color.RED, Direction.EAST))
-    test_board[7][8].append(Barrel(Color.YELLOW, Direction.SOUTH))
+
+    test_board = Board({
+        V2(3, 3): [ResourceTile(Color.RED)],
+        V2(3, 3): [ResourceExtractor()],
+        V2(5, 4): [Barrel(Color.RED, Direction.EAST)],
+        V2(8, 7): [Barrel(Color.YELLOW, Direction.SOUTH)]
+    })
+
+
+    print(test_board.get(V2(3, 3)))     # TODO: debug this
+    pprint(test_board.get_grid())
     test_level = Level(test_board)
 
     for _ in range(10):
