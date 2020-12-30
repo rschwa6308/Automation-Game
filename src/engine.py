@@ -17,27 +17,38 @@ class Board:
         self.cells = cells
     
     def get(self, x, y):
+        """returns a tuple containing all entities at the specified location"""
         if (x, y) in self.cells:
             return tuple(self.cells[(x, y)])   # return an immutable type
         else:
             return tuple()
     
-    def insert(self, pos, *entities):
+    def get_cells(self):
+        """returns a generator containing all non-empty cells (with positions)"""
+        for pos, cell in self.cells.items():
+            yield V2(*pos), cell
+
+    def get_all(self):
+        """returns a generator containing all present entities (with positions)"""
+        for pos, cell in self.cells.items():
+            for e in cell:
+                yield V2(*pos), e
+
+    def insert(self, x, y, *entities):
+        pos = (x, y)
         if pos not in self.cells:
             self.cells[pos] = []
         self.cells[pos].extend(entities)
     
-    def remove(self, pos, *entities):
+    def remove(self, x, y, *entities):
+        pos = (x, y)
         if pos not in self.cells or any(e not in self.cells[pos] for e in entities):
             raise ValueError(f"Cannot remove non-present entities (at pos {pos})")
         
         for e in entities:
             self.cells[pos].remove(e)
     
-    def get_all(self):
-        for pos, cell in self.cells.items():
-            for e in cell:
-                yield V2(*pos), e
+    
     
     def get_grid(self, margin=0) -> Sequence[Sequence[Collection[Entity]]]:
         """compute minimal dense-matrix representation (with margin)"""
@@ -112,17 +123,17 @@ class Level:
                 dest = pos + e.velocity
                 if self.is_walkable(dest):
                     # move the entity to the dest
-                    self.board.remove(pos, e)
-                    self.board.insert(dest, e)
+                    self.board.remove(*pos, e)
+                    self.board.insert(*dest, e)
 
     def apply_merges(self):
-        for pos, cell in list(self.board.get_all()):    #  list() avoids concurrent modification
+        for pos, cell in list(self.board.get_cells()):    #  list() avoids concurrent modification
             mergable = [e for e in cell if e.merges]
             if len(mergable) > 1:
                 # merge repeatably
                 res = reduce(lambda a, b: a + b, mergable[1:], mergable[0])
-                self.board.remove(pos, *mergable)
-                self.board.insert(pos, res)
+                self.board.remove(*pos, *mergable)
+                self.board.insert(*pos, res)
 
 
 from time import sleep
