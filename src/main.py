@@ -138,7 +138,7 @@ class LevelRunner:
                 self.refresh_layout()
                 self.layout_changed = False
                 self.contents_changed = True    # trigger re-draw
-            
+
             if self.contents_changed:
                 self.draw_background()
                 self.draw_level()
@@ -172,7 +172,9 @@ class LevelRunner:
             self.layout_changed = True
 
     def handle_keydown(self, key):
-        if key == pg.K_SPACE:
+        if key == pg.K_ESCAPE:
+            self.running = False
+        elif key == pg.K_SPACE:
             # toggle shelf state (initiates animation (if not already in progress))
             if self.shelf_state in ("open", "closed"):
                 if self.shelf_state == "open":
