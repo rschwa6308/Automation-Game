@@ -1,27 +1,7 @@
 import enum
 import pygame as pg
 
-from colors import Color
-
-
-# RGB values taken from https://en.wikipedia.org/wiki/Tertiary_color#/media/File:Color_star-en_(tertiary_names).svg
-# names do not match up exactly (e.g. "violet")
-COLOR_RBG_MAP = {
-    Color.RED:              (254, 39, 18),
-    Color.RED_ORANGE:       (253, 83, 8),
-    Color.ORANGE:           (251, 153, 2),
-    Color.YELLOW_ORANGE:    (250, 188, 2),
-    Color.YELLOW:           (254, 254, 51),
-    Color.YELLOW_GREEN:     (208, 234, 43),
-    Color.GREEN:            (102, 176, 50),
-    Color.BLUE_GREEN:       (3, 146, 206),
-    Color.BLUE:             (2, 71, 254),
-    Color.BLUE_VIOLET:      (6, 1, 164),
-    Color.VIOLET:           (134, 1, 175),
-    Color.RED_VIOLET:       (167, 25, 75),
-    Color.BROWN:            (139, 69, 19),      # "saddlebrown" (https://www.rapidtables.com/web/color/brown-color.html)
-}
-
+from colors import Color, COLOR_RBG_MAP
 
 
 

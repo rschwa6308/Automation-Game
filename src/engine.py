@@ -1,13 +1,15 @@
 # --- Internal Level Representation and Gamerules --- #
 from typing import Collection, Mapping, Tuple, Sequence
 from functools import reduce
+import pygame as pg             # for type hints
+from math import floor, ceil
 
 from entities import *
 from helpers import V2
 
 
 class Board:
-    """a hashing based sparse-matrix representation of an infinite 2D game board"""
+    """a hashing based sparse-matrix representation of an infinite 2D game board; uses inverted y-axis convention"""
     board_type = Mapping[Tuple[int, int], Collection[Entity]]
 
     def __init__(self, cells: board_type = {}):
@@ -48,23 +50,24 @@ class Board:
         for e in entities:
             self.cells[pos].remove(e)
     
-    
-    
-    def get_grid(self, margin=0) -> Sequence[Sequence[Collection[Entity]]]:
-        """compute minimal dense-matrix representation (with margin)"""
+    def get_bounding_rect(self, margin: int = 0) -> pg.Rect:
+        """returns the minimal rect completely containing all non-empty cells (with the given margin)"""
         min_x = min(pos[0] for pos in self.cells) - margin
         max_x = max(pos[0] for pos in self.cells) + margin
         min_y = min(pos[1] for pos in self.cells) - margin
         max_y = max(pos[1] for pos in self.cells) + margin
 
-        width = max_x - min_x + 1
-        height = max_y - min_y + 1
+        return pg.Rect(min_x, min_y, max_x - min_x + 1, max_y - min_y + 1)
 
-        grid = [[None for _ in range(width)] for _ in range(height)]
+    def get_grid(self, margin: int = 0) -> Sequence[Sequence[Collection[Entity]]]:
+        """compute minimal dense-matrix representation (with the given margin)"""
+        bounding_rect = self.get_bounding_rect(margin=margin)
 
-        for x in range(width):
-            for y in range(height):
-                pos = (min_x + x, min_y + y)
+        grid = [[None for _ in range(bounding_rect.width)] for _ in range(bounding_rect.height)]
+
+        for x in range(bounding_rect.width):
+            for y in range(bounding_rect.height):
+                pos = (bounding_rect.left + x, bounding_rect.top + y)
                 grid[y][x] = self.get(*pos)
         
         return grid
@@ -77,7 +80,7 @@ class Board:
 
         return "\n".join(
             " ".join(get_ascii_str(cell) for cell in row)
-            for row in grid[::-1]     # flip y-axis
+            for row in grid     # do not flip y-axis
         )
 
 
@@ -137,13 +140,11 @@ class Level:
 
 
 from time import sleep
-from pprint import pprint
 
 if __name__ == "__main__":
 
     test_board = Board({
-        (3, 3): [ResourceTile(Color.RED)],
-        (3, 3): [ResourceExtractor()],
+        (3, 3): [ResourceTile(Color.RED), ResourceExtractor()],
         (5, 4): [Barrel(Color.RED, Direction.EAST)],
         (8, 7): [Barrel(Color.YELLOW, Direction.SOUTH)]
     })
