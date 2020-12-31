@@ -1,8 +1,8 @@
 # --- Internal Level Representation and Gamerules --- #
-from typing import Collection, Mapping, Tuple, Sequence
+from typing import Collection, Mapping, Tuple, Type, Sequence
 from functools import reduce
 import pygame as pg             # for type hints
-from math import floor, ceil
+from copy import deepcopy
 
 from entities import *
 from helpers import V2
@@ -83,6 +83,8 @@ class Board:
             for row in grid     # do not flip y-axis
         )
 
+    # def __copy__(self):
+    #     return Board(copy(self.cells))
 
 
 class Level:
@@ -91,12 +93,17 @@ class Level:
 
     def __init__(
         self,
-        board: Board = None
+        board: Board = None,
+        palette: Sequence[Tuple[Type[Entity], int]] = []
     ):
         if board is None:
             board = Board()
 
         self.board = board
+        self.starting_board = deepcopy(board)
+
+        self.palette = palette
+        self.starting_palette = deepcopy(palette)
     
     def __str__(self):
         return str(self.board)
@@ -138,6 +145,9 @@ class Level:
                 self.board.remove(*pos, *mergable)
                 self.board.insert(*pos, res)
 
+    def reset(self):
+        self.board = deepcopy(self.starting_board)
+        self.palette = deepcopy(self.starting_palette)
 
 from time import sleep
 

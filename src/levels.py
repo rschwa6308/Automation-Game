@@ -10,4 +10,7 @@ test_board = Board({
         (-1, -1): [Barrel(Color.BLUE_GREEN, Direction.NORTH)]
     })
 
-test_level = Level(test_board)
+test_level = Level(test_board, [
+    (ResourceExtractor, 2),
+    (ResourceTile, 7),
+])

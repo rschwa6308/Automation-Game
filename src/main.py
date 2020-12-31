@@ -5,6 +5,7 @@ from animations import Animation
 from entities import Barrel
 os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"   # cringe
 import pygame as pg
+import pygame.freetype
 from math import floor, ceil
 
 from engine import Level
@@ -25,19 +26,26 @@ TARGET_FPS = 60
 
 # Layout-Related Constants
 SHELF_HEIGHT = 100
-SHELF_ANIMATION_SPEED = 10  # pixels per frame
+SHELF_ANIMATION_SPEED = 15  # pixels per frame
 
 DEFAULT_CELL_SIZE_PX = 64
 
+PALETTE_ITEM_SIZE_PX = 64
+PALETTE_ITEM_SPACING_PX = 8
+
 
 # Aesthetics-Related Constants
-SHELF_BG_COLOR = (127, 127, 127)
+SHELF_BG_COLOR = (127, 127, 127, 191)
 VIEWPORT_BG_COLOR = (255, 255, 255)
 
 GRID_LINE_COLOR = (0, 0, 0)
 DEFAULT_GRID_LINE_WIDTH = 2
-MIN_GRID_LINE_WIDTH = 2
+MIN_GRID_LINE_WIDTH = 1
 MAX_GRID_LINE_WIDTH = 5
+
+
+# Misc Constants
+LEVEL_STEP_INTERVAL = 800   # milliseconds
 
 
 class Camera:
@@ -83,7 +91,7 @@ class LevelRunner:
 
         self.screen_width = DEFAULT_SCREEN_WIDTH
         self.screen_height = DEFAULT_SCREEN_HEIGHT
-        self.shelf_height = SHELF_HEIGHT
+        self.shelf_height_onscreen = SHELF_HEIGHT
 
         self.keys_pressed = set()
 
@@ -95,17 +103,25 @@ class LevelRunner:
         zoom_level = min(self.screen_width / rect.width, self.screen_height / rect.height) / DEFAULT_CELL_SIZE_PX
         self.camera = Camera(center=V2(*rect.center), zoom_level=zoom_level)
 
-        # initialize `shelf_rect`
-        self.refresh_layout()
-
         # initialize refresh sentinels
         self.layout_changed = False
-        self.contents_changed = False
+        self.viewport_changed = False
+        self.shelf_changed = False
 
     def run(self):
         """run the level in a resizable window at `TARGET_FPS`"""
-        # initialize display and adjust camera
+        # initialize display, initialize output surfaces, and adjust camera
         self.handle_window_resize(DEFAULT_SCREEN_WIDTH, DEFAULT_SCREEN_HEIGHT)
+
+        pg.freetype.init()
+        self.palette_font = pg.freetype.SysFont("ariel", 16, bold=True)
+
+        # initialize `viewport_surf`, `shelf_surf`, and `shelf_rect`
+        # self.refresh_layout()
+        self.draw_level()
+        self.draw_shelf()
+
+        self.prev_step_elapsed = 0
 
         # mainloop
         clock = pg.time.Clock()
@@ -132,44 +148,59 @@ class LevelRunner:
             
             # handle shelf animation
             self.handle_shelf_animation()
+
+            # handle level execution
+            if not self.edit_mode:
+                self.prev_step_elapsed += clock.get_time()
+                # print(time - self.prev_step_time)
+                if self.prev_step_elapsed > LEVEL_STEP_INTERVAL:
+                    self.level.step()
+                    self.prev_step_elapsed = 0
+                    self.viewport_changed = True
             
             # handle output
-            if self.layout_changed:
-                self.refresh_layout()
-                self.layout_changed = False
-                self.contents_changed = True    # trigger re-draw
+            if self.window_size_changed:
+                # trigger total re-draw
+                self.viewport_changed = True
+                self.shelf_changed = True
+                self.window_size_changed = False
 
-            if self.contents_changed:
-                self.draw_background()
+            if self.viewport_changed:
                 self.draw_level()
+            
+            if self.shelf_changed:
                 self.draw_shelf()
-                self.contents_changed = False
-                pg.display.update()
 
-    def refresh_layout(self):
-        self.shelf_rect = pg.Rect(0, self.screen_height - self.shelf_height, self.screen_width, self.shelf_height)
+            if self.viewport_changed or self.shelf_changed:
+                self.screen.blit(self.viewport_surf, (0, 0))
+                self.screen.blit(self.shelf_surf, (0, self.screen_height - self.shelf_height_onscreen))
+                pg.display.update()
+                self.viewport_changed = False
+                self.shelf_changed = False
 
     def handle_window_resize(self, new_width, new_height):
         self.screen_width = max(new_width, MIN_SCREEN_WIDTH)
         self.screen_height = max(new_height, MIN_SCREEN_HEIGHT)
         self.screen = pg.display.set_mode((self.screen_width, self.screen_height), pg.RESIZABLE)
-        self.layout_changed = True
+        self.window_size_changed = True
+        self.viewport_surf = pg.Surface((self.screen_width, self.screen_height))
+        self.shelf_surf = pg.Surface((self.screen_width, SHELF_HEIGHT), pg.SRCALPHA)
 
     def handle_shelf_animation(self):
         if self.shelf_state == "closing":
-            self.shelf_height -= SHELF_ANIMATION_SPEED
-            if self.shelf_height <= 0:
-                self.shelf_height = 0
+            self.shelf_height_onscreen -= SHELF_ANIMATION_SPEED
+            if self.shelf_height_onscreen <= 0:
+                self.shelf_height_onscreen = 0
                 self.shelf_state = "closed"
                 self.edit_mode = False
-            self.layout_changed = True
+            self.shelf_changed = True
         elif self.shelf_state == "opening":
-            self.shelf_height += SHELF_ANIMATION_SPEED
-            if self.shelf_height >= SHELF_HEIGHT:
-                self.shelf_height = SHELF_HEIGHT
+            self.shelf_height_onscreen += SHELF_ANIMATION_SPEED
+            if self.shelf_height_onscreen >= SHELF_HEIGHT:
+                self.shelf_height_onscreen = SHELF_HEIGHT
                 self.shelf_state = "open"
                 self.edit_mode = True
-            self.layout_changed = True
+            self.shelf_changed = True
 
     def handle_keydown(self, key):
         if key == pg.K_ESCAPE:
@@ -181,10 +212,12 @@ class LevelRunner:
                     self.shelf_state = "closing"
                 elif self.shelf_state == "closed":
                     self.shelf_state = "opening"
+                    self.level.reset()      # reset board and palette
+                    self.viewport_changed = True
         # TEMPORARY
         elif key == pg.K_RIGHT:
             self.level.step()
-            self.contents_changed = True
+            self.viewport_changed = True
 
     def handle_keyup(self, key):
         pass
@@ -195,29 +228,29 @@ class LevelRunner:
                 disp = self.pan_keys_map[key]
                 self.camera.pan(disp)
                 # print("camera center:", self.camera.center)
-                self.contents_changed = True
+                self.viewport_changed = True
 
     def handle_mousebuttondow(self, button):
         if button == 4:    # zoom in
             self.camera.zoom(1)
-            self.contents_changed = True
+            self.viewport_changed = True
         elif button == 5:   # zoom out
             self.camera.zoom(-1)
-            self.contents_changed = True
-
-    def draw_background(self):
-        self.screen.fill(VIEWPORT_BG_COLOR)
+            self.viewport_changed = True
 
     def draw_level(self):
+        """draw the level onto `viewport_surf`"""
         s = self.camera.get_cell_size_px()
-        screen_center = V2(*self.screen.get_rect().center)
-        # offset = self.camera.center.fmod(s)
+        surf_center = V2(*self.viewport_surf.get_rect().center)
+        surf_width, surf_height = self.viewport_surf.get_size()
 
-        def convert(pos: V2) -> V2:
-            return round(screen_center + (pos - self.camera.center) * s)
+        def grid_to_px(pos: V2) -> V2:
+            return round(surf_center + (pos - self.camera.center) * s)
+        
+        self.viewport_surf.fill(VIEWPORT_BG_COLOR)
 
-        w = self.screen_width / s
-        h = self.screen_height / s
+        w = surf_width / s
+        h = surf_height / s
         grid_rect = pg.Rect(
             floor(self.camera.center.x - w / 2),
             floor(self.camera.center.y - h / 2),
@@ -230,22 +263,22 @@ class LevelRunner:
         grid_line_width = min(max(grid_line_width, MIN_GRID_LINE_WIDTH), MAX_GRID_LINE_WIDTH)
         for x in range(grid_rect.width):
             x_grid = grid_rect.left + x - 0.5
-            x_px, _ = convert(V2(x_grid, 0))
+            x_px, _ = grid_to_px(V2(x_grid, 0))
             pg.draw.line(
-                self.screen,
+                self.viewport_surf,
                 GRID_LINE_COLOR,
                 (x_px, 0),
-                (x_px, self.screen_height),
+                (x_px, surf_height),
                 width=grid_line_width
             )
         for y in range(grid_rect.height):
             y_grid = grid_rect.top + y - 0.5
-            _,  y_px = convert(V2(0, y_grid))
+            _,  y_px = grid_to_px(V2(0, y_grid))
             pg.draw.line(
-                self.screen,
+                self.viewport_surf,
                 GRID_LINE_COLOR,
                 (0, y_px),
-                (self.screen_width, y_px),
+                (surf_width, y_px),
                 width=grid_line_width
             )
 
@@ -253,17 +286,37 @@ class LevelRunner:
         for x in range(grid_rect.width):
             for y in range(grid_rect.height):
                 grid_pos = V2(x, y) + V2(*grid_rect.topleft)
-                draw_pos = convert(grid_pos)
+                draw_pos = grid_to_px(grid_pos)
                 cell = self.level.board.get(*grid_pos)
                 for e in cell:
                     # TEMPORARY
                     draw_color_ryb = e.color if isinstance(e, Barrel) else Color.BROWN
                     draw_color_rgb = COLOR_RBG_MAP[draw_color_ryb]
-                    pg.draw.circle(self.screen, draw_color_rgb, tuple(draw_pos), s // 3)
+                    pg.draw.circle(self.viewport_surf, draw_color_rgb, tuple(draw_pos), s // 3)
 
     def draw_shelf(self):
-        if self.shelf_state != "closed":
-            pg.draw.rect(self.screen, SHELF_BG_COLOR, self.shelf_rect)
+        if self.shelf_state == "closed":
+            return      # NoOp
+        
+        self.shelf_surf.fill(SHELF_BG_COLOR)
+
+        # draw palette
+        for i, (e_type, count) in enumerate(self.level.palette):
+            margin = (SHELF_HEIGHT - PALETTE_ITEM_SIZE_PX) // 2
+            rect = pg.Rect(
+                margin + (PALETTE_ITEM_SIZE_PX + margin + PALETTE_ITEM_SPACING_PX) * i,
+                margin,
+                PALETTE_ITEM_SIZE_PX,
+                PALETTE_ITEM_SIZE_PX
+            )
+            pg.draw.rect(self.shelf_surf, (0, 255, 0), rect)
+            pg.draw.circle(self.shelf_surf, (255, 0, 0), rect.topright, 14)
+            text_img, text_rect = self.palette_font.render(str(count), fgcolor=(255, 255, 255))
+            self.shelf_surf.blit(
+                text_img,
+                (rect.right - text_rect.width / 2, rect.top - text_rect.height / 2)
+            )
+            # print(i, e_type, count)
 
 
 
