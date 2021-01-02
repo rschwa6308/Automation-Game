@@ -15,33 +15,34 @@ from colors import Color, COLOR_RBG_MAP
 
 
 # Display-Related Constants
-DEFAULT_SCREEN_WIDTH = 800
+DEFAULT_SCREEN_WIDTH  = 800
 DEFAULT_SCREEN_HEIGHT = 600
 
-MIN_SCREEN_WIDTH = 300
+MIN_SCREEN_WIDTH  = 300
 MIN_SCREEN_HEIGHT = 200
 
 TARGET_FPS = 60
 
 
 # Layout-Related Constants
-SHELF_HEIGHT = 100
+SHELF_HEIGHT          = 100 # pixels
 SHELF_ANIMATION_SPEED = 15  # pixels per frame
 
-DEFAULT_CELL_SIZE_PX = 64
+DEFAULT_CELL_SIZE     = 64 # pixels
 
-PALETTE_ITEM_SIZE_PX = 64
-PALETTE_ITEM_SPACING_PX = 8
+PALETTE_ITEM_SIZE     = 64  # pixels
+PALETTE_ITEM_SPACING  = 8   # pixels
 
 
 # Aesthetics-Related Constants
-SHELF_BG_COLOR = (127, 127, 127, 191)
-VIEWPORT_BG_COLOR = (255, 255, 255)
+SHELF_BG_COLOR            = (127, 127, 127, 191)
+VIEWPORT_BG_COLOR         = (255, 255, 255)
+VELOCITY_CHEVRON_COLOR    = (0, 0, 0)
+GRID_LINE_COLOR           = (0, 0, 0)
 
-GRID_LINE_COLOR = (0, 0, 0)
-DEFAULT_GRID_LINE_WIDTH = 2
-MIN_GRID_LINE_WIDTH = 1
-MAX_GRID_LINE_WIDTH = 5
+DEFAULT_GRID_LINE_WIDTH   = 2
+MIN_GRID_LINE_WIDTH       = 1
+MAX_GRID_LINE_WIDTH       = 5
 
 
 # Misc Constants
@@ -75,7 +76,7 @@ class Camera:
         self.zoom_level = min(max(self.zoom_level, self.min_zoom_level), self.max_zoom_level)
     
     def get_cell_size_px(self):
-        return DEFAULT_CELL_SIZE_PX * self.zoom_level
+        return DEFAULT_CELL_SIZE * self.zoom_level
 
 
 class LevelRunner:
@@ -100,7 +101,7 @@ class LevelRunner:
 
         # initialize camera to contain `level.board` (with some margin)
         rect = level.board.get_bounding_rect(margin=3)   # arbitrary value
-        zoom_level = min(self.screen_width / rect.width, self.screen_height / rect.height) / DEFAULT_CELL_SIZE_PX
+        zoom_level = min(self.screen_width / rect.width, self.screen_height / rect.height) / DEFAULT_CELL_SIZE
         self.camera = Camera(center=V2(*rect.center), zoom_level=zoom_level)
 
         # initialize refresh sentinels
@@ -183,7 +184,7 @@ class LevelRunner:
         self.screen_height = max(new_height, MIN_SCREEN_HEIGHT)
         self.screen = pg.display.set_mode((self.screen_width, self.screen_height), pg.RESIZABLE)
         self.window_size_changed = True
-        self.viewport_surf = pg.Surface((self.screen_width, self.screen_height))
+        self.viewport_surf = pg.Surface((self.screen_width, self.screen_height), pg.HWSURFACE)
         self.shelf_surf = pg.Surface((self.screen_width, SHELF_HEIGHT), pg.SRCALPHA)
 
     def handle_shelf_animation(self):
@@ -293,6 +294,19 @@ class LevelRunner:
                     draw_color_ryb = e.color if isinstance(e, Barrel) else Color.BROWN
                     draw_color_rgb = COLOR_RBG_MAP[draw_color_ryb]
                     pg.draw.circle(self.viewport_surf, draw_color_rgb, tuple(draw_pos), s // 3)
+                    # draw velocity indicator chevron
+                    if e.moves and e.velocity is not Direction.NONE:
+                        # TODO: use `draw_chevron` helper function
+                        pass
+                        # l = s // 3
+                        # for rot in (-1, 1):
+                        #     pg.draw.line(
+                        #         self.viewport_surf,
+                        #         VELOCITY_CHEVRON_COLOR,
+                        #         tuple(draw_pos + e.velocity.rot90(rot) * l),
+                        #         tuple(draw_pos + e.velocity * l),
+                        #         width=grid_line_width * 2   # use double thickness as grid
+                        #     )
 
     def draw_shelf(self):
         if self.shelf_state == "closed":
@@ -302,12 +316,12 @@ class LevelRunner:
 
         # draw palette
         for i, (e_type, count) in enumerate(self.level.palette):
-            margin = (SHELF_HEIGHT - PALETTE_ITEM_SIZE_PX) // 2
+            margin = (SHELF_HEIGHT - PALETTE_ITEM_SIZE) // 2
             rect = pg.Rect(
-                margin + (PALETTE_ITEM_SIZE_PX + margin + PALETTE_ITEM_SPACING_PX) * i,
+                margin + (PALETTE_ITEM_SIZE + margin + PALETTE_ITEM_SPACING) * i,
                 margin,
-                PALETTE_ITEM_SIZE_PX,
-                PALETTE_ITEM_SIZE_PX
+                PALETTE_ITEM_SIZE,
+                PALETTE_ITEM_SIZE
             )
             pg.draw.rect(self.shelf_surf, (0, 255, 0), rect)
             pg.draw.circle(self.shelf_surf, (255, 0, 0), rect.topright, 14)
