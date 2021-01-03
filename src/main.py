@@ -37,7 +37,6 @@ PALETTE_ITEM_SPACING  = 8   # pixels
 # Aesthetics-Related Constants
 SHELF_BG_COLOR            = (127, 127, 127, 191)
 VIEWPORT_BG_COLOR         = (255, 255, 255)
-VELOCITY_CHEVRON_COLOR    = (0, 0, 0)
 GRID_LINE_COLOR           = (0, 0, 0)
 
 DEFAULT_GRID_LINE_WIDTH   = 2
@@ -50,7 +49,7 @@ LEVEL_STEP_INTERVAL = 800   # milliseconds
 
 
 class Camera:
-    min_zoom_level = 0.3
+    min_zoom_level = 0.4
     max_zoom_level = 5.0
 
     pan_speed = 0.15
@@ -184,7 +183,7 @@ class LevelRunner:
         self.screen_height = max(new_height, MIN_SCREEN_HEIGHT)
         self.screen = pg.display.set_mode((self.screen_width, self.screen_height), pg.RESIZABLE)
         self.window_size_changed = True
-        self.viewport_surf = pg.Surface((self.screen_width, self.screen_height), pg.HWSURFACE)
+        self.viewport_surf = pg.Surface((self.screen_width, self.screen_height))
         self.shelf_surf = pg.Surface((self.screen_width, SHELF_HEIGHT), pg.SRCALPHA)
 
     def handle_shelf_animation(self):
@@ -260,6 +259,16 @@ class LevelRunner:
             ceil(h) + 2
         )
 
+        # draw board
+        for x in range(grid_rect.width):
+            for y in range(grid_rect.height):
+                grid_pos = V2(x, y) + V2(*grid_rect.topleft)
+                draw_pos = grid_to_px(grid_pos)
+                cell = self.level.board.get(*grid_pos)
+                for e in sorted(cell, key=lambda e: e.draw_precedence):
+                    rect = pg.Rect(round(draw_pos.x - s / 2), round(draw_pos.y - s / 2), s + 1, s + 1)
+                    e.draw_onto(self.viewport_surf, rect, self.edit_mode)
+
         # draw grid with dynamic line width
         grid_line_width = round(DEFAULT_GRID_LINE_WIDTH * self.camera.zoom_level ** 0.5)
         grid_line_width = min(max(grid_line_width, MIN_GRID_LINE_WIDTH), MAX_GRID_LINE_WIDTH)
@@ -284,39 +293,6 @@ class LevelRunner:
                 width=grid_line_width
             )
 
-        # draw board
-        for x in range(grid_rect.width):
-            for y in range(grid_rect.height):
-                grid_pos = V2(x, y) + V2(*grid_rect.topleft)
-                draw_pos = grid_to_px(grid_pos)
-                cell = self.level.board.get(*grid_pos)
-                for e in cell:
-                    # TEMPORARY
-                    draw_color_ryb = e.color if isinstance(e, Barrel) else Color.BROWN
-                    draw_color_rgb = COLOR_RBG_MAP[draw_color_ryb]
-                    pg.draw.circle(self.viewport_surf, draw_color_rgb, tuple(draw_pos), s * 0.3)
-                    # draw velocity indicator chevron
-                    if self.edit_mode and e.moves and e.velocity is not Direction.NONE:
-                        # TODO: use `draw_chevron` helper function
-                        draw_chevron(
-                            self.viewport_surf,
-                            draw_pos + e.velocity * (s * 0.42),
-                            e.velocity,
-                            VELOCITY_CHEVRON_COLOR,
-                            s // 4,
-                            grid_line_width * 2,
-                            angle=120
-                        )
-                        # l = s // 3
-                        # for rot in (-1, 1):
-                        #     pg.draw.line(
-                        #         self.viewport_surf,
-                        #         VELOCITY_CHEVRON_COLOR,
-                        #         tuple(draw_pos + e.velocity.rot90(rot) * l),
-                        #         tuple(draw_pos + e.velocity * l),
-                        #         width=grid_line_width * 2   # use double thickness as grid
-                        #     )
-
     def draw_shelf(self):
         if self.shelf_state == "closed":
             return      # NoOp
@@ -332,7 +308,9 @@ class LevelRunner:
                 PALETTE_ITEM_SIZE,
                 PALETTE_ITEM_SIZE
             )
-            pg.draw.rect(self.shelf_surf, (0, 255, 0), rect)
+            temp_entity = e_type()
+            temp_entity.draw_onto(self.shelf_surf, rect, edit_mode=True)
+            # pg.draw.rect(self.shelf_surf, (0, 255, 0), rect)
             pg.draw.circle(self.shelf_surf, (255, 0, 0), rect.topright, 14)
             text_img, text_rect = self.palette_font.render(str(count), fgcolor=(255, 255, 255))
             self.shelf_surf.blit(

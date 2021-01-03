@@ -30,11 +30,12 @@ class Board:
         for pos, cell in self.cells.items():
             yield V2(*pos), cell
 
-    def get_all(self):
+    def get_all(self, filter_type: Type[Entity] = Entity):
         """returns a generator containing all present entities (with positions)"""
         for pos, cell in self.cells.items():
             for e in cell:
-                yield V2(*pos), e
+                if isinstance(e, filter_type):
+                    yield V2(*pos), e
 
     def insert(self, x, y, *entities):
         pos = (x, y)
@@ -104,6 +105,8 @@ class Level:
 
         self.palette = palette
         self.starting_palette = deepcopy(palette)
+
+        self.step_count = 0
     
     def __str__(self):
         return str(self.board)
@@ -115,6 +118,9 @@ class Level:
     
     def step(self):
         """step the level one time unit"""
+        # apply resource extractors
+        self.apply_resource_extractors()
+
         # apply translations
         self.apply_translations()
 
@@ -124,8 +130,20 @@ class Level:
         # apply sensors & pistons
 
         # apply rotations
+        self.apply_rotations()
 
         # apply others (?)
+        
+        self.step_count += 1
+    
+    def apply_resource_extractors(self):
+        for pos, e in list(self.board.get_all(filter_type=ResourceExtractor)):     # list() avoids concurrent modification
+            if self.step_count % e.period == 0:
+                for d in self.board.get(*pos):
+                    if isinstance(d, ResourceTile):
+                        # spawn (at most) one new barrel here
+                        self.board.insert(*pos, Barrel(d.color, e.orientation))
+                        break
 
     def apply_translations(self):
         for pos, e in list(self.board.get_all()):       # list() avoids concurrent modification
@@ -144,10 +162,17 @@ class Level:
                 res = reduce(lambda a, b: a + b, mergable[1:], mergable[0])
                 self.board.remove(*pos, *mergable)
                 self.board.insert(*pos, res)
+    
+    def apply_rotations(self):
+        for pos, e in list(self.board.get_all(filter_type=Boostpad)):
+            for d in self.board.get(*pos):
+                if d.moves:
+                    d.velocity = e.orientation
 
     def reset(self):
         self.board = deepcopy(self.starting_board)
         self.palette = deepcopy(self.starting_palette)
+        self.step_count = 0
 
 from time import sleep
 

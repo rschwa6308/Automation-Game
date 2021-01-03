@@ -3,6 +3,7 @@ import math
 
 import pygame as pg
 
+
 class V2:
     """2D vector class"""
     def __init__(self, x, y):
@@ -61,14 +62,38 @@ class Direction(V2, Enum):
 
 def draw_chevron(surf: pg.Surface, dest: V2, orientation: V2, color, length: int, width: int, angle: int = 90):
     """draws a chevron on `surf` pointing in the given orientation with the tip at `dest`"""
-    for i in (-1, 1):
-        pg.draw.line(
-            surf,
-            color,
-            tuple(round(dest - orientation.rotate(i * angle // 2) * length)),
+    a = dest - orientation.rotate(angle // 2) * length
+    b = dest - orientation.rotate(-angle // 2) * length
+    pg.draw.polygon(
+        surf,
+        color,
+        [
             tuple(dest),
-            width=width
-        )
+            tuple(round(a)),
+            tuple(round(a - orientation.rotate(-angle // 2) * width)),
+            tuple(round(dest - orientation * (width / math.sin(math.radians(angle) / 2)))),
+            tuple(round(b - orientation.rotate(angle // 2) * width)),
+            tuple(round(b))
+        ]
+    )
+
+    # # draw lines
+    # for i in (-1, 1):
+    #     pg.draw.line(
+    #         surf,
+    #         color,
+    #         tuple(round(dest - orientation.rotate(i * angle // 2) * length)),
+    #         tuple(dest),
+    #         width=width
+    #     )
+    
+    # # fill tip
+    # pg.draw.polygon(
+    #     surf,
+    #     color,
+    #     [tuple(dest), ],
+    #     width=0
+    # )
 
 
 if __name__ == "__main__":
