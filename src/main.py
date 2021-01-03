@@ -10,7 +10,7 @@ from math import floor, ceil
 
 from engine import Level
 from levels import test_level
-from helpers import Direction, V2
+from helpers import Direction, V2, draw_chevron
 from colors import Color, COLOR_RBG_MAP
 
 
@@ -193,14 +193,12 @@ class LevelRunner:
             if self.shelf_height_onscreen <= 0:
                 self.shelf_height_onscreen = 0
                 self.shelf_state = "closed"
-                self.edit_mode = False
             self.shelf_changed = True
         elif self.shelf_state == "opening":
             self.shelf_height_onscreen += SHELF_ANIMATION_SPEED
             if self.shelf_height_onscreen >= SHELF_HEIGHT:
                 self.shelf_height_onscreen = SHELF_HEIGHT
                 self.shelf_state = "open"
-                self.edit_mode = True
             self.shelf_changed = True
 
     def handle_keydown(self, key):
@@ -211,9 +209,12 @@ class LevelRunner:
             if self.shelf_state in ("open", "closed"):
                 if self.shelf_state == "open":
                     self.shelf_state = "closing"
+                    self.edit_mode = False
+                    self.viewport_changed = True
                 elif self.shelf_state == "closed":
                     self.shelf_state = "opening"
                     self.level.reset()      # reset board and palette
+                    self.edit_mode = True
                     self.viewport_changed = True
         # TEMPORARY
         elif key == pg.K_RIGHT:
@@ -293,11 +294,19 @@ class LevelRunner:
                     # TEMPORARY
                     draw_color_ryb = e.color if isinstance(e, Barrel) else Color.BROWN
                     draw_color_rgb = COLOR_RBG_MAP[draw_color_ryb]
-                    pg.draw.circle(self.viewport_surf, draw_color_rgb, tuple(draw_pos), s // 3)
+                    pg.draw.circle(self.viewport_surf, draw_color_rgb, tuple(draw_pos), s * 0.3)
                     # draw velocity indicator chevron
-                    if e.moves and e.velocity is not Direction.NONE:
+                    if self.edit_mode and e.moves and e.velocity is not Direction.NONE:
                         # TODO: use `draw_chevron` helper function
-                        pass
+                        draw_chevron(
+                            self.viewport_surf,
+                            draw_pos + e.velocity * (s * 0.42),
+                            e.velocity,
+                            VELOCITY_CHEVRON_COLOR,
+                            s // 4,
+                            grid_line_width * 2,
+                            angle=120
+                        )
                         # l = s // 3
                         # for rot in (-1, 1):
                         #     pg.draw.line(
@@ -331,7 +340,6 @@ class LevelRunner:
                 (rect.right - text_rect.width / 2, rect.top - text_rect.height / 2)
             )
             # print(i, e_type, count)
-
 
 
 

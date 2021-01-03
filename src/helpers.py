@@ -33,13 +33,13 @@ class V2:
     def fmod(self, div):
         return V2(math.fmod(self.x, div), math.fmod(self.y, div))
     
-    # def rotate(self, angle: int):
-    #     """return a new V2 of the same length rotated clockwise by `angle` degrees"""
-    #     angle = math.radians(angle)
-    #     return V2(
-    #         self.x * math.cos(angle) - self.y * math.sin(angle),
-    #         self.x * math.sin(angle) + self.y * math.cos(angle),
-    #     )
+    def rotate(self, angle: int):
+        """return a new V2 of the same length rotated clockwise by `angle` degrees"""
+        angle = math.radians(angle)
+        return V2(
+            self.x * math.cos(angle) - self.y * math.sin(angle),
+            self.x * math.sin(angle) + self.y * math.cos(angle),
+        )
 
 
 class Direction(V2, Enum):
@@ -59,16 +59,16 @@ class Direction(V2, Enum):
         
 
 
-def draw_chevron(surf: pg.Surface, dest: V2, orientation: Direction, color, width: int):
+def draw_chevron(surf: pg.Surface, dest: V2, orientation: V2, color, length: int, width: int, angle: int = 90):
     """draws a chevron on `surf` pointing in the given orientation with the tip at `dest`"""
-    pg.draw.line(
-        surf,
-        color,
-        
-        # tuple(draw_pos + e.velocity.rot90(rot) * l),
-        # tuple(draw_pos + e.velocity * l),
-        width=width
-    )
+    for i in (-1, 1):
+        pg.draw.line(
+            surf,
+            color,
+            tuple(round(dest - orientation.rotate(i * angle // 2) * length)),
+            tuple(dest),
+            width=width
+        )
 
 
 if __name__ == "__main__":
