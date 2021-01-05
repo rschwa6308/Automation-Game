@@ -107,6 +107,7 @@ class Level:
         self.starting_palette = deepcopy(palette)
 
         self.step_count = 0
+        self.won = False
     
     def __str__(self):
         return str(self.board)
@@ -132,7 +133,11 @@ class Level:
         # apply rotations
         self.apply_rotations()
 
-        # apply others (?)
+        # apply targets
+        self.apply_targets()
+
+        # check for win
+        self.check_won()
         
         self.step_count += 1
     
@@ -153,6 +158,7 @@ class Level:
                     # move the entity to the dest
                     self.board.remove(*pos, e)
                     self.board.insert(*dest, e)
+                    # TODO: barrel leak stuff here
 
     def apply_merges(self):
         for pos, cell in list(self.board.get_cells()):    #  list() avoids concurrent modification
@@ -168,11 +174,25 @@ class Level:
             for d in self.board.get(*pos):
                 if d.moves:
                     d.velocity = e.orientation
+    
+    def apply_targets(self):
+        for pos, e in list(self.board.get_all(filter_type=Target)):
+            for d in self.board.get(*pos):
+                if isinstance(d, Barrel):
+                    self.board.remove(*pos, d)  # absorb barrel regardless of color
+                    if d.color is e.color:
+                        e.count -= 1
+
+    
+    def check_won(self):
+        self.won = all(e.count == 0 for _, e in self.board.get_all(filter_type=Target))
+
 
     def reset(self):
         self.board = deepcopy(self.starting_board)
         self.palette = deepcopy(self.starting_palette)
         self.step_count = 0
+        self.won = False
 
 from time import sleep
 

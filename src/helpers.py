@@ -28,6 +28,12 @@ class V2:
     def __mul__(self, factor):
         return V2(self.x * factor, self.y * factor)
     
+    def __truediv__(self, d):
+        return self * (1 / d)
+    
+    def __neg__(self):
+        return V2(-self.x, -self.y)
+    
     def __round__(self):
         return V2(round(self.x), round(self.y))
     
@@ -41,6 +47,10 @@ class V2:
             self.x * math.cos(angle) - self.y * math.sin(angle),
             self.x * math.sin(angle) + self.y * math.cos(angle),
         )
+    
+    def floor(self):
+        """return a new V2 with the components floored"""
+        return V2(math.floor(self.x), math.floor(self.y))
 
 
 class Direction(V2, Enum):
@@ -77,23 +87,16 @@ def draw_chevron(surf: pg.Surface, dest: V2, orientation: V2, color, length: int
         ]
     )
 
-    # # draw lines
-    # for i in (-1, 1):
-    #     pg.draw.line(
-    #         surf,
-    #         color,
-    #         tuple(round(dest - orientation.rotate(i * angle // 2) * length)),
-    #         tuple(dest),
-    #         width=width
-    #     )
-    
-    # # fill tip
-    # pg.draw.polygon(
-    #     surf,
-    #     color,
-    #     [tuple(dest), ],
-    #     width=0
-    # )
+
+def render_text_centered(font, text, color, surf, dest):
+    text_img, text_rect = font.render(text, fgcolor=color)
+    surf.blit(
+        text_img,
+        (dest[0] - text_rect.width / 2, dest[1] - text_rect.height / 2)
+    )
+
+def clamp(value, min_v, max_v):
+    return max(min_v, min(value, max_v))
 
 
 if __name__ == "__main__":

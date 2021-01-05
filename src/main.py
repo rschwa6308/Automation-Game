@@ -1,8 +1,9 @@
 # --- Rendering and UI --- #
 import os
+from typing import Union
 
 from animations import Animation
-from entities import Barrel
+from entities import Barrel, Entity
 os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"   # cringe
 import pygame as pg
 import pygame.freetype
@@ -10,13 +11,13 @@ from math import floor, ceil
 
 from engine import Level
 from levels import test_level
-from helpers import Direction, V2, draw_chevron
+from helpers import Direction, V2, draw_chevron, render_text_centered
 from colors import Color, COLOR_RBG_MAP
 
 
 # Display-Related Constants
-DEFAULT_SCREEN_WIDTH  = 800
-DEFAULT_SCREEN_HEIGHT = 600
+DEFAULT_SCREEN_WIDTH  = 1000
+DEFAULT_SCREEN_HEIGHT = 800
 
 MIN_SCREEN_WIDTH  = 300
 MIN_SCREEN_HEIGHT = 200
@@ -49,33 +50,49 @@ LEVEL_STEP_INTERVAL = 800   # milliseconds
 
 
 class Camera:
+    """stores a center point and a zoom level (using floating-point board coordinates)"""
+
     min_zoom_level = 0.4
-    max_zoom_level = 5.0
+    max_zoom_level = 4.0
 
     pan_speed = 0.15
     zoom_speed = 0.10
 
-    """stores a center point and a zoom level (using floating-point board coordinates)"""
     def __init__(self, center: V2, zoom_level: float):
         self.center = center
-        self.zoom_level = zoom_level
-        self.rectify_zoom_level()
+        self.zoom_level = zoom_level # clamp(zoom_level, self.min_zoom_level, self.max_zoom_level)
     
     def pan(self, disp: V2):
-        """translate `rect` by the given displacement (scaled according to zoom level)"""
+        """translate `center` by the given displacement (scaled according to zoom level)"""
         self.center += disp * self.pan_speed * (1 / self.zoom_level)
     
-    def zoom(self, amt: float):
-        """increase zoom level by amt"""
-        self.zoom_level += amt * self.zoom_speed
-        self.rectify_zoom_level()
+    def pan_abs(self, disp: V2):
+        """translate `center` by the given displacement"""
+        self.center += disp
     
-    def rectify_zoom_level(self):
-        """ensure `min_zoom_level <= zoom_level <= max_zoom_level` is in bounds"""
-        self.zoom_level = min(max(self.zoom_level, self.min_zoom_level), self.max_zoom_level)
+    def zoom(self, amt: float, pivot: V2):
+        """increase zoom level by `amt` about `pivot`"""
+        amt *= self.zoom_speed
+        amt = min(amt, self.max_zoom_level - self.zoom_level)
+        amt = max(amt, self.min_zoom_level - self.zoom_level)
+
+        # pan to keep pivot in same location on screen
+        disp_px_before = (pivot - self.center) * self.zoom_level
+        self.zoom_level += amt
+        disp_px_after = (pivot - self.center) * self.zoom_level
+
+        diff_px = disp_px_after - disp_px_before
+        diff = diff_px / self.zoom_level
+        self.pan_abs(diff)
     
     def get_cell_size_px(self):
         return DEFAULT_CELL_SIZE * self.zoom_level
+    
+    def get_world_coords(self, pos: V2, screen_width, screen_height):
+        """converts the given pixel `pos` to world coordinates"""
+        screen_center = V2(screen_width / 2, screen_height / 2)
+        diff = pos - screen_center
+        return self.center + diff * (1 / self.get_cell_size_px())
 
 
 class LevelRunner:
@@ -94,6 +111,8 @@ class LevelRunner:
         self.shelf_height_onscreen = SHELF_HEIGHT
 
         self.keys_pressed = set()
+        self.mouse_buttons_pressed = set()
+        self.mouse_pos = V2(0, 0)
 
         self.edit_mode = True
         self.shelf_state = "open"   # "open", "closed", "opening", or "closing"
@@ -104,9 +123,13 @@ class LevelRunner:
         self.camera = Camera(center=V2(*rect.center), zoom_level=zoom_level)
 
         # initialize refresh sentinels
-        self.layout_changed = False
+        self.window_size_changed = False
         self.viewport_changed = False
         self.shelf_changed = False
+        self.reblit_needed = False
+
+        self.held_entity: Union[Entity, None] = None
+        self.hold_point: V2 = V2(0, 0)  # in [0, 1]^2
 
     def run(self):
         """run the level in a resizable window at `TARGET_FPS`"""
@@ -142,7 +165,16 @@ class LevelRunner:
                     self.keys_pressed.remove(event.key)
                     self.handle_keyup(event.key)
                 elif event.type == pg.MOUSEBUTTONDOWN:
-                    self.handle_mousebuttondow(event.button)
+                    self.mouse_buttons_pressed.add(event.button)
+                    self.handle_mousebuttondown(event.button)
+                elif event.type == pg.MOUSEBUTTONUP:
+                    self.mouse_buttons_pressed.remove(event.button)
+                    self.handle_mousebuttonup(event.button)
+                elif event.type == pg.MOUSEMOTION:
+                    self.mouse_pos = V2(*event.pos)
+                    self.handle_mousemotion(event.rel)
+                    # print(self.mouse_pos)
+                    # print(self.camera.get_world_coords(self.mouse_pos, self.screen_width, self.screen_height))
             
             self.handle_keys_pressed()
             
@@ -157,6 +189,9 @@ class LevelRunner:
                     self.level.step()
                     self.prev_step_elapsed = 0
                     self.viewport_changed = True
+                    if self.level.won:
+                        print("good job")
+                        # TODO: show congrats screen or something
             
             # handle output
             if self.window_size_changed:
@@ -167,16 +202,26 @@ class LevelRunner:
 
             if self.viewport_changed:
                 self.draw_level()
+                self.reblit_needed = True
+                self.viewport_changed = False
             
             if self.shelf_changed:
                 self.draw_shelf()
+                self.reblit_needed = True
+                self.shelf_changed = False
 
-            if self.viewport_changed or self.shelf_changed:
+            if self.reblit_needed:
+                # blit updated surfs to the screen
                 self.screen.blit(self.viewport_surf, (0, 0))
                 self.screen.blit(self.shelf_surf, (0, self.screen_height - self.shelf_height_onscreen))
+                # draw held entity at cursor
+                if self.held_entity is not None:
+                    s = self.camera.get_cell_size_px()
+                    rect = pg.Rect(*self.mouse_pos, s, s)
+                    rect.move_ip(*(-self.hold_point * s))
+                    self.held_entity.draw_onto(self.screen, rect, self.edit_mode)
                 pg.display.update()
-                self.viewport_changed = False
-                self.shelf_changed = False
+                
 
     def handle_window_resize(self, new_width, new_height):
         self.screen_width = max(new_width, MIN_SCREEN_WIDTH)
@@ -206,7 +251,7 @@ class LevelRunner:
         elif key == pg.K_SPACE:
             # toggle shelf state (initiates animation (if not already in progress))
             if self.shelf_state in ("open", "closed"):
-                if self.shelf_state == "open":
+                if self.shelf_state == "open" and self.held_entity is None:
                     self.shelf_state = "closing"
                     self.edit_mode = False
                     self.viewport_changed = True
@@ -231,13 +276,54 @@ class LevelRunner:
                 # print("camera center:", self.camera.center)
                 self.viewport_changed = True
 
-    def handle_mousebuttondow(self, button):
+    def handle_mousebuttondown(self, button):
+        # handle camera zooming (scroll wheel)
+        zoom_direction = 0
         if button == 4:    # zoom in
-            self.camera.zoom(1)
-            self.viewport_changed = True
+            zoom_direction = 1
         elif button == 5:   # zoom out
-            self.camera.zoom(-1)
+            zoom_direction = -1
+        
+        if zoom_direction != 0:
+            pivot = self.camera.get_world_coords(self.mouse_pos, self.screen_width, self.screen_height)
+            self.camera.zoom(zoom_direction, pivot)
             self.viewport_changed = True
+        
+        # handle entity holding (left click)
+        if button == 1:
+            pos_float = self.camera.get_world_coords(self.mouse_pos, self.screen_width, self.screen_height)
+            pos = pos_float.floor()
+            print(self.level.board.get(*pos))
+            cell = self.level.board.get(*pos)
+            if cell:
+                # pick up entity
+                self.held_entity = cell[0]    # select first element; TODO: figure out if this is a problem lol
+                self.level.board.remove(*pos, self.held_entity)
+                self.viewport_changed = True
+                self.hold_point = pos_float.fmod(1) #/ self.camera.get_cell_size_px()
+                print(self.hold_point)
+
+
+    def handle_mousebuttonup(self, button):
+        # handle entity holding (left click)
+        if button == 1:
+            if self.held_entity is not None:
+                # drop entity
+                pos = (self.camera.get_world_coords(self.mouse_pos, self.screen_width, self.screen_height)).floor()
+                self.level.board.insert(*pos, self.held_entity)
+                self.held_entity = None
+                self.viewport_changed = True
+
+    def handle_mousemotion(self, rel):
+        # pan camera if right click is held
+        if 3 in self.mouse_buttons_pressed:
+            # print(rel)
+            disp = V2(*rel) / self.camera.get_cell_size_px()
+            self.camera.pan_abs(-disp)
+            self.viewport_changed = True
+        
+        if self.held_entity is not None:
+            self.reblit_needed = True
 
     def draw_level(self):
         """draw the level onto `viewport_surf`"""
@@ -246,7 +332,7 @@ class LevelRunner:
         surf_width, surf_height = self.viewport_surf.get_size()
 
         def grid_to_px(pos: V2) -> V2:
-            return round(surf_center + (pos - self.camera.center) * s)
+            return (surf_center + (pos - self.camera.center) * s).floor()
         
         self.viewport_surf.fill(VIEWPORT_BG_COLOR)
 
@@ -262,19 +348,21 @@ class LevelRunner:
         # draw board
         for x in range(grid_rect.width):
             for y in range(grid_rect.height):
-                grid_pos = V2(x, y) + V2(*grid_rect.topleft)
+                grid_pos = V2(*grid_rect.topleft) + V2(x, y)
                 draw_pos = grid_to_px(grid_pos)
                 cell = self.level.board.get(*grid_pos)
                 for e in sorted(cell, key=lambda e: e.draw_precedence):
-                    rect = pg.Rect(round(draw_pos.x - s / 2), round(draw_pos.y - s / 2), s + 1, s + 1)
+                    rect = pg.Rect(*draw_pos, s + 1, s + 1)
                     e.draw_onto(self.viewport_surf, rect, self.edit_mode)
 
         # draw grid with dynamic line width
         grid_line_width = round(DEFAULT_GRID_LINE_WIDTH * self.camera.zoom_level ** 0.5)
         grid_line_width = min(max(grid_line_width, MIN_GRID_LINE_WIDTH), MAX_GRID_LINE_WIDTH)
+        # grid_line_width = 1
         for x in range(grid_rect.width):
-            x_grid = grid_rect.left + x - 0.5
+            x_grid = grid_rect.left + x
             x_px, _ = grid_to_px(V2(x_grid, 0))
+            # x_px -= 1
             pg.draw.line(
                 self.viewport_surf,
                 GRID_LINE_COLOR,
@@ -283,8 +371,9 @@ class LevelRunner:
                 width=grid_line_width
             )
         for y in range(grid_rect.height):
-            y_grid = grid_rect.top + y - 0.5
+            y_grid = grid_rect.top + y
             _,  y_px = grid_to_px(V2(0, y_grid))
+            # y_px -= 1
             pg.draw.line(
                 self.viewport_surf,
                 GRID_LINE_COLOR,
@@ -312,12 +401,7 @@ class LevelRunner:
             temp_entity.draw_onto(self.shelf_surf, rect, edit_mode=True)
             # pg.draw.rect(self.shelf_surf, (0, 255, 0), rect)
             pg.draw.circle(self.shelf_surf, (255, 0, 0), rect.topright, 14)
-            text_img, text_rect = self.palette_font.render(str(count), fgcolor=(255, 255, 255))
-            self.shelf_surf.blit(
-                text_img,
-                (rect.right - text_rect.width / 2, rect.top - text_rect.height / 2)
-            )
-            # print(i, e_type, count)
+            render_text_centered(self.palette_font, str(count), (255, 255, 255), self.shelf_surf, rect.topright)
 
 
 

@@ -1,9 +1,11 @@
 # --- Level Entities --- #
-from helpers import V2, Direction, draw_chevron
+from helpers import V2, Direction, draw_chevron, render_text_centered
 from colors import Color, COLOR_RBG_MAP
 
 import pygame as pg
+import pygame.freetype
 
+pygame.freetype.init()
 
 
 VELOCITY_CHEVRON_COLOR    = (0, 0, 0)
@@ -30,6 +32,13 @@ class Block(Entity):
     draw_precedence = 1
 
 
+class Barrier(Block):
+    name = "Barrier"
+    ascii_str = "█"
+    stops = True
+
+    def draw_onto(self, surf: pg.Surface, rect: pg.Rect, edit_mode: bool):
+        pg.draw.rect(surf, (0, 0, 0), rect)
 
 class Barrel(Block):
     name = "Barrel"
@@ -41,11 +50,12 @@ class Barrel(Block):
     def __init__(self, color: Color, velocity: Direction = Direction.NONE):
         self.color = color
         self.velocity = velocity
+        self.leaky = False
 
     def __add__(self, other):
         return Barrel(self.color + other.color)
 
-    def draw_onto(self, surf, rect, edit_mode):
+    def draw_onto(self, surf: pg.Surface, rect: pg.Rect, edit_mode: bool):
         s = rect.width
         draw_color_rgb = COLOR_RBG_MAP[self.color]
         pg.draw.circle(surf, draw_color_rgb, rect.center, s * 0.3)
@@ -119,3 +129,29 @@ class Boostpad(Carpet):
             )
 
 
+class Target(Carpet):
+    name = "Target"
+    ascii_str = "T"
+    count_font = pg.freetype.SysFont("arial", 20)
+
+    def __init__(self, color: Color, count: int):
+        self.color = color
+        self.count = count
+    
+    def draw_onto(self, surf: pg.Surface, rect: pg.Rect, edit_mode: bool):
+        s = rect.width
+        pg.draw.rect(surf, COLOR_RBG_MAP[self.color], rect)
+        padding = s * 0.35
+        radius = round(s * 0.2)
+        pg.draw.rect(surf, (255, 255, 255), rect.inflate(-padding, -padding), border_radius=radius)
+        # TODO: use `Font.get_sizes()` to change font size
+        render_text_centered(
+            self.count_font,
+            str(self.count),
+            (0, 0, 0),
+            surf,
+            rect.center
+        )
+
+        # text_img, text_rect = self.palette_font.render(str(count), fgcolor=(255, 255, 255))
+        
