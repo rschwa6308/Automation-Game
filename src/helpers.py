@@ -38,7 +38,7 @@ class V2:
         return V2(round(self.x), round(self.y))
     
     def fmod(self, div):
-        return V2(math.fmod(self.x, div), math.fmod(self.y, div))
+        return V2(math.fmod((math.fmod(self.x, div) + div), div), math.fmod((math.fmod(self.y, div) + div), div))
     
     def rotate(self, angle: int):
         """return a new V2 of the same length rotated clockwise by `angle` degrees"""
