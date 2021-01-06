@@ -311,10 +311,12 @@ class LevelRunner:
                 cell = self.level.board.get(*pos)
                 if cell:
                     # pick up entity (from board)
-                    self.held_entity = cell[-1]    # select last element; TODO: figure out if this is a problem lol
-                    self.level.board.remove(*pos, self.held_entity)
-                    self.viewport_changed = True
-                    self.hold_point = pos_float.fmod(1)
+                    e = cell[-1]    # select last element; TODO: figure out if this is a problem lol
+                    if not e.locked:
+                        self.held_entity = e
+                        self.level.board.remove(*pos, self.held_entity)
+                        self.viewport_changed = True
+                        self.hold_point = pos_float.fmod(1)
 
     def handle_mousebuttonup(self, button):
         # handle entity holding (left click)

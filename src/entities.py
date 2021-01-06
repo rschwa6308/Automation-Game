@@ -18,6 +18,9 @@ class Entity:
     merges: bool = False
     draw_precedence: int = 0
 
+    def __init__(self, locked: bool):
+        self.locked = locked
+
     def draw_onto(self, surf: pg.Surface, rect: pg.Rect, edit_mode: bool):
         pass
 
@@ -26,16 +29,26 @@ class Carpet(Entity):
     stops = False
     draw_precedence = 0
 
+    def __init__(self, locked: bool):
+        super().__init__(locked)
+
 
 class Block(Entity):
     stops = True
     draw_precedence = 1
+
+    def __init__(self, locked: bool):
+        super().__init__(locked)
 
 
 class Barrier(Block):
     name = "Barrier"
     ascii_str = "█"
     stops = True
+    
+    # barriers are locked by default
+    def __init__(self, locked: bool = True):
+        super().__init__(locked)
 
     def draw_onto(self, surf: pg.Surface, rect: pg.Rect, edit_mode: bool):
         pg.draw.rect(surf, (50, 50, 50), rect)
@@ -48,7 +61,9 @@ class Barrel(Block):
     stops = False
     merges = True
 
-    def __init__(self, color: Color, velocity: Direction = Direction.NONE):
+    # barrels are unlocked by default
+    def __init__(self, color: Color, velocity: Direction = Direction.NONE, locked: bool = False):
+        super().__init__(locked)
         self.color = color
         self.velocity = velocity
         self.leaky = False
@@ -76,7 +91,9 @@ class ResourceTile(Carpet):
     name = "Resource Tile"
     ascii_str = "O"
 
+    # resource tiles are always locked
     def __init__(self, color: Color):
+        super().__init__(True)
         self.color = color
     
     def draw_onto(self, surf: pg.Surface, rect: pg.Rect, edit_mode: bool):
@@ -88,19 +105,21 @@ class ResourceExtractor(Block):
     ascii_str = "X"
     period = 3
 
-    def __init__(self, orientation: Direction = Direction.NORTH):
+    # resource extractors are unlocked by default
+    def __init__(self, orientation: Direction = Direction.NORTH, locked: bool = False):
+        super().__init__(locked)
         self.orientation = orientation
     
     def draw_onto(self, surf: pg.Surface, rect: pg.Rect, edit_mode: bool):
         # TEMPORARY
         s = rect.width
         w = round(s * 0.1)
-        pg.draw.circle(surf, (255, 255, 255), rect.center, s // 3, width=w)
+        pg.draw.circle(surf, (220, 220, 220), rect.center, s // 3, width=w)
         draw_chevron(
             surf,
-            V2(*rect.center) + self.orientation * (s * 0.435),
+            V2(*rect.center) + self.orientation * (s * 0.432),
             self.orientation,
-            (255, 255, 255),
+            (220, 220, 220),
             round(s * 0.28),
             w,
             angle=100
@@ -111,7 +130,9 @@ class Boostpad(Carpet):
     name = "Boostpad"
     ascii_str = "X"
 
-    def __init__(self, orientation: Direction = Direction.NORTH):
+    # boostpads are unlocked by default
+    def __init__(self, orientation: Direction = Direction.NORTH, locked: bool = False):
+        super().__init__(locked)
         if (orientation is Direction.NONE):
             raise ValueError("Boostpad orientation cannot be `Direction.NONE`")
 
@@ -135,7 +156,9 @@ class Target(Carpet):
     ascii_str = "T"
     count_font = pg.freetype.SysFont("arial", 20)
 
+    # targets are always locked
     def __init__(self, color: Color, count: int):
+        super().__init__(True)
         self.color = color
         self.count = count
     
@@ -153,6 +176,3 @@ class Target(Carpet):
             surf,
             rect.center
         )
-
-        # text_img, text_rect = self.palette_font.render(str(count), fgcolor=(255, 255, 255))
-        
