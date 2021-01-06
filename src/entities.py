@@ -38,7 +38,8 @@ class Barrier(Block):
     stops = True
 
     def draw_onto(self, surf: pg.Surface, rect: pg.Rect, edit_mode: bool):
-        pg.draw.rect(surf, (0, 0, 0), rect)
+        pg.draw.rect(surf, (50, 50, 50), rect)
+
 
 class Barrel(Block):
     name = "Barrel"

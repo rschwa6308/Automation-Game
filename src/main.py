@@ -1,8 +1,8 @@
 # --- Rendering and UI --- #
 import os
-from typing import Union
+from typing import Union, Type, Sequence, Tuple
 
-from animations import Animation
+# from animations import Animation
 from entities import Barrel, Entity
 os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"   # cringe
 import pygame as pg
@@ -131,6 +131,8 @@ class LevelRunner:
         self.held_entity: Union[Entity, None] = None
         self.hold_point: V2 = V2(0, 0)  # in [0, 1]^2
 
+        self.palette_rects: Sequence[Tuple[pg.Rect, Type[Entity]]] = [] # store palette item rects for easier collision
+
     def run(self):
         """run the level in a resizable window at `TARGET_FPS`"""
         # initialize display, initialize output surfaces, and adjust camera
@@ -217,8 +219,8 @@ class LevelRunner:
                 # draw held entity at cursor
                 if self.held_entity is not None:
                     s = self.camera.get_cell_size_px()
-                    rect = pg.Rect(*self.mouse_pos, s, s)
-                    rect.move_ip(*(-self.hold_point * s))
+                    rect = pg.Rect(*self.mouse_pos, s + 1, s + 1)
+                    rect.move_ip(*(-self.hold_point * s - V2(1, 1)))
                     self.held_entity.draw_onto(self.screen, rect, self.edit_mode)
                 pg.display.update()
                 
@@ -251,13 +253,14 @@ class LevelRunner:
         elif key == pg.K_SPACE:
             # toggle shelf state (initiates animation (if not already in progress))
             if self.shelf_state in ("open", "closed"):
-                if self.shelf_state == "open" and self.held_entity is None:
+                if self.edit_mode and self.held_entity is None:
                     self.shelf_state = "closing"
                     self.edit_mode = False
+                    self.level.save_state()         # freeze current board/palette state
                     self.viewport_changed = True
-                elif self.shelf_state == "closed":
+                elif not self.edit_mode:
                     self.shelf_state = "opening"
-                    self.level.reset()      # reset board and palette
+                    self.level.load_saved_state()   # revert board and palette
                     self.edit_mode = True
                     self.viewport_changed = True
         # TEMPORARY
@@ -290,24 +293,39 @@ class LevelRunner:
             self.viewport_changed = True
         
         # handle entity holding (left click)
-        if button == 1:
-            pos_float = self.camera.get_world_coords(self.mouse_pos, self.screen_width, self.screen_height)
-            pos = pos_float.floor()
-            print(self.level.board.get(*pos))
-            cell = self.level.board.get(*pos)
-            if cell:
-                # pick up entity
-                self.held_entity = cell[0]    # select first element; TODO: figure out if this is a problem lol
-                self.level.board.remove(*pos, self.held_entity)
-                self.viewport_changed = True
-                self.hold_point = pos_float.fmod(1) #/ self.camera.get_cell_size_px()
-                print(self.hold_point)
-
+        if button == 1 and self.edit_mode:
+            if self.mouse_pos.y >= self.screen_height - self.shelf_height_onscreen:
+                # cursor is over shelf
+                adjusted_pos = self.mouse_pos - V2(0, self.screen_height - self.shelf_height_onscreen)
+                for rect, e_type in self.palette_rects:
+                    if rect.collidepoint(*adjusted_pos):
+                        # pick up entity (from palette)
+                        self.held_entity = e_type()  # create new entity
+                        self.hold_point = V2(0.5, 0.5)
+                        self.level.palette.remove(self.held_entity)
+                        self.shelf_changed = True
+            else:
+                # cursor is over board
+                pos_float = self.camera.get_world_coords(self.mouse_pos, self.screen_width, self.screen_height)
+                pos = pos_float.floor()
+                cell = self.level.board.get(*pos)
+                if cell:
+                    # pick up entity (from board)
+                    self.held_entity = cell[-1]    # select last element; TODO: figure out if this is a problem lol
+                    self.level.board.remove(*pos, self.held_entity)
+                    self.viewport_changed = True
+                    self.hold_point = pos_float.fmod(1)
 
     def handle_mousebuttonup(self, button):
         # handle entity holding (left click)
-        if button == 1:
-            if self.held_entity is not None:
+        if button == 1 and self.held_entity is not None:
+            if self.mouse_pos.y >= self.screen_height - self.shelf_height_onscreen:
+                # cursor is over shelf
+                self.level.palette.add(self.held_entity)
+                self.held_entity = None
+                self.shelf_changed = True
+            else:
+                # cursor is over board
                 # drop entity
                 pos = (self.camera.get_world_coords(self.mouse_pos, self.screen_width, self.screen_height)).floor()
                 self.level.board.insert(*pos, self.held_entity)
@@ -389,7 +407,8 @@ class LevelRunner:
         self.shelf_surf.fill(SHELF_BG_COLOR)
 
         # draw palette
-        for i, (e_type, count) in enumerate(self.level.palette):
+        self.palette_rects.clear()
+        for i, (e_type, count) in enumerate(self.level.palette.get_all()):
             margin = (SHELF_HEIGHT - PALETTE_ITEM_SIZE) // 2
             rect = pg.Rect(
                 margin + (PALETTE_ITEM_SIZE + margin + PALETTE_ITEM_SPACING) * i,
@@ -397,11 +416,13 @@ class LevelRunner:
                 PALETTE_ITEM_SIZE,
                 PALETTE_ITEM_SIZE
             )
-            temp_entity = e_type()
-            temp_entity.draw_onto(self.shelf_surf, rect, edit_mode=True)
-            # pg.draw.rect(self.shelf_surf, (0, 255, 0), rect)
-            pg.draw.circle(self.shelf_surf, (255, 0, 0), rect.topright, 14)
-            render_text_centered(self.palette_font, str(count), (255, 255, 255), self.shelf_surf, rect.topright)
+            self.palette_rects.append((rect, e_type))
+            if count > 0:   # only draw item if there are any left (maintains spacing)
+                temp_entity = e_type()
+                temp_entity.draw_onto(self.shelf_surf, rect, edit_mode=True)
+                # pg.draw.rect(self.shelf_surf, (0, 255, 0), rect)
+                pg.draw.circle(self.shelf_surf, (255, 0, 0), rect.topright, 14)
+                render_text_centered(self.palette_font, str(count), (255, 255, 255), self.shelf_surf, rect.topright)
 
 
 

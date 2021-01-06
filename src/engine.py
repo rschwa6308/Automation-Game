@@ -88,6 +88,29 @@ class Board:
     #     return Board(copy(self.cells))
 
 
+class Palette:
+    def __init__(self, items: Mapping[Type[Entity], int] = {}):
+        self.items = items
+
+    def get_all(self) -> Sequence[Tuple[Type[Entity], int]]:
+        """return a list of all items (with counts) sorted by name"""
+        return sorted(self.items.items(), key=lambda item: item[0].name)
+    
+    def remove(self, entity: Entity):
+        e_type = type(entity)
+        self.items[e_type] -= 1
+
+        if self.items[e_type] == 0:
+            self.items.pop(e_type)
+    
+    def add(self, entity: Entity):
+        e_type = type(entity)
+        if e_type not in self.items:
+            self.items[e_type] = 0
+
+        self.items[e_type] += 1
+
+
 class Level:
     default_width = 10
     default_height = 8
@@ -95,16 +118,18 @@ class Level:
     def __init__(
         self,
         board: Board = None,
-        palette: Sequence[Tuple[Type[Entity], int]] = []
+        palette: Palette = None
     ):
         if board is None:
             board = Board()
+        
+        if palette is None:
+            palette = Palette()
 
         self.board = board
-        self.starting_board = deepcopy(board)
-
         self.palette = palette
-        self.starting_palette = deepcopy(palette)
+
+        self.starting_state: Tuple[Board, Palette] = (deepcopy(board), deepcopy(palette))
 
         self.step_count = 0
         self.won = False
@@ -182,17 +207,25 @@ class Level:
                     self.board.remove(*pos, d)  # absorb barrel regardless of color
                     if d.color is e.color:
                         e.count -= 1
-
     
     def check_won(self):
         self.won = all(e.count == 0 for _, e in self.board.get_all(filter_type=Target))
 
-
     def reset(self):
-        self.board = deepcopy(self.starting_board)
-        self.palette = deepcopy(self.starting_palette)
+        self.board, self.palette = self.starting_state
         self.step_count = 0
         self.won = False
+    
+    def save_state(self):
+        """save the current board and palette state"""
+        self.saved_state = (deepcopy(self.board), deepcopy(self.palette))
+
+    def load_saved_state(self):
+        """revert `board` and `palette` to their states at the last call to `save_state`"""
+        self.board, self.palette = self.saved_state
+        self.step_count = 0
+        self.won = False
+
 
 from time import sleep
 

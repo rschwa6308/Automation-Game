@@ -1,4 +1,4 @@
-from engine import Board, Level
+from engine import Board, Level, Palette
 from entities import *
 
 
@@ -16,10 +16,12 @@ test_board = Board({
         (1, 3): [Barrier()],
         (1, 0): [Barrier()],
         (2, 0): [Barrier()],
-        (2, 1): [Barrier()]
+        (2, 1): [Barrier()],
     })
 
-test_level = Level(test_board, [
-    (ResourceExtractor, 2),
-    (Boostpad, 7),
-])
+test_palette = Palette({
+    ResourceExtractor: 2,
+    Boostpad: 7,
+})
+
+test_level = Level(test_board, test_palette)
