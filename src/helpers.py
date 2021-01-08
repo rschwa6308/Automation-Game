@@ -2,6 +2,7 @@ from enum import Enum
 import math
 
 import pygame as pg
+import pygame.gfxdraw
 
 
 class V2:
@@ -95,8 +96,11 @@ def draw_chevron(surf: pg.Surface, dest: V2, orientation: V2, color, length: int
     )
 
 
-def render_text_centered(font, text, color, surf, dest):
-    text_img, text_rect = font.render(text, fgcolor=color)
+def render_text_centered(font, text, color, surf, dest, height):
+    # print(font.get_sizes())
+    s = round(height)
+    # s = max([rec for rec in font.get_sizes() if rec[1] <= height], key=lambda rec: rec[1])[0]
+    text_img, text_rect = font.render(text, fgcolor=color, size=s)
     surf.blit(
         text_img,
         (dest[0] - text_rect.width / 2, dest[1] - text_rect.height / 2)
@@ -112,7 +116,6 @@ def sgn(x):
     return 1 if x >= 0 else -1
 
 
-
 def interpolate_colors(a, b, bias):
     """takes two RGB tuples and returns a componentwise weighted average"""
     return (
@@ -120,6 +123,20 @@ def interpolate_colors(a, b, bias):
         int(a[1] * (1 - bias) + b[1] * bias),
         int(a[2] * (1 - bias) + b[2] * bias),
     )
+
+
+def draw_aacircle(surf, x, y, r, color):
+    """draws a filled anti-aliased circle at the given position and radius"""
+    pg.gfxdraw.aacircle(surf, x, y, r, color)
+    pg.gfxdraw.filled_circle(surf, x, y, r, color)
+
+
+def draw_rectangle(surf, rect, color, thickness=1):
+    """draws a rectangle with given draw thickness"""
+    pg.draw.rect(surf, color, pg.Rect(rect.left, rect.top, rect.width, thickness + 1))
+    pg.draw.rect(surf, color, pg.Rect(rect.left, rect.bottom - thickness, rect.width, thickness + 1))
+    pg.draw.rect(surf, color, pg.Rect(rect.left, rect.top, thickness + 1, rect.height))
+    pg.draw.rect(surf, color, pg.Rect(rect.right - thickness, rect.top, thickness + 1, rect.height))
 
 
 if __name__ == "__main__":

@@ -3,20 +3,24 @@ from __future__ import annotations  # allows self-reference in type annotations
 from typing import Collection, Tuple, Union
 from abc import abstractmethod
 
-from helpers import V2, Direction, draw_chevron, render_text_centered, interpolate_colors, sgn
+from helpers import V2, Direction, draw_aacircle, draw_chevron, draw_rectangle, render_text_centered, interpolate_colors, sgn
 from colors import Color
 
 import pygame as pg
 import pygame.freetype
+import pygame.gfxdraw
 
 pygame.freetype.init()
 
 
-VELOCITY_CHEVRON_COLOR = (0, 0, 0)
+VELOCITY_CHEVRON_COLOR      = (0, 0, 0)
+HIGHLIGHT_COLOR             = (0, 255, 255)
+HIGHLIGHT_THICKNESS_MULT    = 0.10
 
 
 class Entity:
     moves: bool = False
+    orients: bool = False
     stops: bool = False
     merges: bool = False
     draw_precedence: int = 0
@@ -30,6 +34,7 @@ class Entity:
         surf: pg.Surface,
         rect: pg.Rect,
         edit_mode: bool,
+        selected: bool = False,
         step_progress: float = 0.0,
         neighborhood = (([],) * 5,) * 5
     ):
@@ -61,8 +66,12 @@ class Barrier(Block):
     def __init__(self, locked: bool = True):
         super().__init__(locked)
 
-    def draw_onto(self, surf: pg.Surface, rect: pg.Rect, edit_mode: bool, step_progress: float = 0.0, neighborhood = (([],) * 5,) * 5):
+    def draw_onto(self, surf: pg.Surface, rect: pg.Rect, edit_mode: bool, selected: bool = False, step_progress: float = 0.0, neighborhood = (([],) * 5,) * 5):
         pg.draw.rect(surf, (50, 50, 50), rect)
+
+        s = rect.width
+        if selected:
+            draw_rectangle(surf, rect, HIGHLIGHT_COLOR, thickness=s*HIGHLIGHT_THICKNESS_MULT)
 
 
 class Barrel(Block):
@@ -95,7 +104,7 @@ class Barrel(Block):
         else:
             return 1.0
 
-    def draw_onto(self, surf: pg.Surface, rect: pg.Rect, edit_mode: bool, step_progress: float = 0.0, neighborhood = (([],) * 5,) * 5):
+    def draw_onto(self, surf: pg.Surface, rect: pg.Rect, edit_mode: bool, selected: bool = False, step_progress: float = 0.0, neighborhood = (([],) * 5,) * 5):
         s = rect.width
         # travel = step_progress                          # continuous constant motion
         # travel = min(1.0, step_progress * 2)            # travel full distance during first half of step
@@ -122,7 +131,10 @@ class Barrel(Block):
                             # smoothly transition towards merged color
                             draw_color_rgb = interpolate_colors(self.color.rgb(), (self.color + e.color).rgb(), percentage)
         
-        pg.draw.circle(surf, draw_color_rgb, tuple(self.draw_center), draw_radius)
+        # pg.draw.circle(surf, draw_color_rgb, tuple(self.draw_center), draw_radius)
+        draw_aacircle(surf, *round(self.draw_center), round(draw_radius), draw_color_rgb)
+        # pg.gfxdraw.aacircle(surf, *round(self.draw_center), draw_radius, draw_color_rgb)
+        # pg.gfxdraw.filled_circle(surf, *round(self.draw_center), draw_radius, draw_color_rgb)
 
         if edit_mode:
             draw_chevron(
@@ -134,6 +146,9 @@ class Barrel(Block):
                 round(s ** 0.5 * 0.4),
                 angle=120
             )
+        
+        if selected:
+            draw_rectangle(surf, rect, HIGHLIGHT_COLOR, thickness=s*HIGHLIGHT_THICKNESS_MULT)
 
 
 class ResourceTile(Carpet):
@@ -145,13 +160,18 @@ class ResourceTile(Carpet):
         super().__init__(True)
         self.color = color
     
-    def draw_onto(self, surf: pg.Surface, rect: pg.Rect, edit_mode: bool, step_progress: float = 0.0, neighborhood = (([],) * 5,) * 5):
+    def draw_onto(self, surf: pg.Surface, rect: pg.Rect, edit_mode: bool, selected: bool = False, step_progress: float = 0.0, neighborhood = (([],) * 5,) * 5):
         pg.draw.rect(surf, self.color.rgb(), rect)
+    
+        s = rect.width
+        if selected:
+            draw_rectangle(surf, rect, HIGHLIGHT_COLOR, thickness=s*HIGHLIGHT_THICKNESS_MULT)
 
 
 class ResourceExtractor(Block):
     name = "Resource Extractor"
     ascii_str = "X"
+    orients = True
     period = 3
 
     # resource extractors are unlocked by default
@@ -159,11 +179,12 @@ class ResourceExtractor(Block):
         super().__init__(locked)
         self.orientation = orientation
     
-    def draw_onto(self, surf: pg.Surface, rect: pg.Rect, edit_mode: bool, step_progress: float = 0.0, neighborhood = (([],) * 5,) * 5):
+    def draw_onto(self, surf: pg.Surface, rect: pg.Rect, edit_mode: bool, selected: bool = False, step_progress: float = 0.0, neighborhood = (([],) * 5,) * 5):
         # TEMPORARY
         s = rect.width
         w = round(s * 0.1)
-        pg.draw.circle(surf, (220, 220, 220), rect.center, s // 3, width=w)
+        draw_aacircle(surf, *rect.center, round(s * 0.35), (220, 220, 220))
+        # pg.draw.circle(surf, (220, 220, 220), rect.center, s // 3, width=w)
         draw_chevron(
             surf,
             V2(*rect.center) + self.orientation * (s * 0.432),
@@ -174,10 +195,14 @@ class ResourceExtractor(Block):
             angle=100
         )
 
+        if selected:
+            draw_rectangle(surf, rect, HIGHLIGHT_COLOR, thickness=s*HIGHLIGHT_THICKNESS_MULT)
+
 
 class Boostpad(Carpet):
     name = "Boostpad"
     ascii_str = "X"
+    orients = True
 
     # boostpads are unlocked by default
     def __init__(self, orientation: Direction = Direction.NORTH, locked: bool = False):
@@ -187,8 +212,8 @@ class Boostpad(Carpet):
 
         self.orientation = orientation
     
-    def draw_onto(self, surf: pg.Surface, rect: pg.Rect, edit_mode: bool, step_progress: float = 0.0, neighborhood = (([],) * 5,) * 5):
-        s = rect.width
+    def draw_onto(self, surf: pg.Surface, rect: pg.Rect, edit_mode: bool, selected: bool = False, step_progress: float = 0.0, neighborhood = (([],) * 5,) * 5):
+        s = rect.width        
         for i in range(3):
             draw_chevron(
                 surf,
@@ -198,6 +223,9 @@ class Boostpad(Carpet):
                 s // 3,
                 round(s * 0.05)
             )
+        
+        if selected:
+            draw_rectangle(surf, rect, HIGHLIGHT_COLOR, thickness=s*HIGHLIGHT_THICKNESS_MULT)
 
 
 class Target(Carpet):
@@ -211,7 +239,7 @@ class Target(Carpet):
         self.color = color
         self.count = count
     
-    def draw_onto(self, surf: pg.Surface, rect: pg.Rect, edit_mode: bool, step_progress: float = 0.0, neighborhood = (([],) * 5,) * 5):
+    def draw_onto(self, surf: pg.Surface, rect: pg.Rect, edit_mode: bool, selected: bool = False, step_progress: float = 0.0, neighborhood = (([],) * 5,) * 5):
         s = rect.width
         pg.draw.rect(surf, self.color.rgb(), rect)
         padding = s * 0.35
@@ -223,5 +251,9 @@ class Target(Carpet):
             str(self.count),
             (0, 0, 0),
             surf,
-            rect.center
+            rect.center,
+            s - padding * 1.75
         )
+
+        if selected:
+            draw_rectangle(surf, rect, HIGHLIGHT_COLOR, thickness=s*HIGHLIGHT_THICKNESS_MULT)
