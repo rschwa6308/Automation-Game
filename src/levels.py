@@ -15,3 +15,17 @@ test_palette = Palette({
 })
 
 test_level = Level(test_board, test_palette)
+
+
+from random import choice
+# a, b = choice(list(Color)), choice(list(Color))
+a, b = Color.RED, Color.BLUE
+
+test_board2 = Board({
+        (-3, 0): [ResourceTile(a), ResourceExtractor(Direction.EAST)],
+        (3, 0): [ResourceTile(b), ResourceExtractor(Direction.WEST)],
+        (0, 0): [Boostpad(Direction.NORTH)],
+        (0, -8): [Target(a + b, 100)]
+    })
+
+test_level2 = Level(test_board2, Palette())

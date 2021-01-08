@@ -19,6 +19,9 @@ class V2:
     def __getitem__(self, item):
         return (self.x, self.y)[item]
     
+    def __eq__(self, other) -> bool:
+        return self.x == other.x and self.y == other.y
+    
     def __add__(self, other):
         return V2(self.x + other.x, self.y + other.y)
     
@@ -36,6 +39,10 @@ class V2:
     
     def __round__(self):
         return V2(round(self.x), round(self.y))
+    
+    def length(self):
+        """L^2 vector norm"""
+        return (self.x ** 2 + self.y ** 2) ** 0.5
     
     def fmod(self, div):
         return V2(math.fmod((math.fmod(self.x, div) + div), div), math.fmod((math.fmod(self.y, div) + div), div))
@@ -95,8 +102,24 @@ def render_text_centered(font, text, color, surf, dest):
         (dest[0] - text_rect.width / 2, dest[1] - text_rect.height / 2)
     )
 
+
 def clamp(value, min_v, max_v):
+    """return rectified value (i.e. the closest point in [`min_v`, `max_v`])"""
     return max(min_v, min(value, max_v))
+
+
+def sgn(x):
+    return 1 if x >= 0 else -1
+
+
+
+def interpolate_colors(a, b, bias):
+    """takes two RGB tuples and returns a componentwise weighted average"""
+    return (
+        int(a[0] * (1 - bias) + b[0] * bias),
+        int(a[1] * (1 - bias) + b[1] * bias),
+        int(a[2] * (1 - bias) + b[2] * bias),
+    )
 
 
 if __name__ == "__main__":

@@ -1,6 +1,10 @@
 # --- Level Entities --- #
-from helpers import V2, Direction, draw_chevron, render_text_centered
-from colors import Color, COLOR_RBG_MAP
+from __future__ import annotations  # allows self-reference in type annotations
+from typing import Collection, Tuple, Union
+from abc import abstractmethod
+
+from helpers import V2, Direction, draw_chevron, render_text_centered, interpolate_colors, sgn
+from colors import Color
 
 import pygame as pg
 import pygame.freetype
@@ -8,8 +12,7 @@ import pygame.freetype
 pygame.freetype.init()
 
 
-VELOCITY_CHEVRON_COLOR    = (0, 0, 0)
-
+VELOCITY_CHEVRON_COLOR = (0, 0, 0)
 
 
 class Entity:
@@ -21,7 +24,15 @@ class Entity:
     def __init__(self, locked: bool):
         self.locked = locked
 
-    def draw_onto(self, surf: pg.Surface, rect: pg.Rect, edit_mode: bool):
+    @abstractmethod
+    def draw_onto(
+        self,
+        surf: pg.Surface,
+        rect: pg.Rect,
+        edit_mode: bool,
+        step_progress: float = 0.0,
+        neighborhood = (([],) * 5,) * 5
+    ):
         pass
 
 
@@ -50,7 +61,7 @@ class Barrier(Block):
     def __init__(self, locked: bool = True):
         super().__init__(locked)
 
-    def draw_onto(self, surf: pg.Surface, rect: pg.Rect, edit_mode: bool):
+    def draw_onto(self, surf: pg.Surface, rect: pg.Rect, edit_mode: bool, step_progress: float = 0.0, neighborhood = (([],) * 5,) * 5):
         pg.draw.rect(surf, (50, 50, 50), rect)
 
 
@@ -60,6 +71,7 @@ class Barrel(Block):
     moves = True
     stops = False
     merges = True
+    draw_precedence = 2     # on top of all other blocks
 
     # barrels are unlocked by default
     def __init__(self, color: Color, velocity: Direction = Direction.NONE, locked: bool = False):
@@ -67,18 +79,55 @@ class Barrel(Block):
         self.color = color
         self.velocity = velocity
         self.leaky = False
+        self.draw_center = V2(0, 0)
 
     def __add__(self, other):
         return Barrel(self.color + other.color)
+    
+    @staticmethod
+    def travel_curve(x):
+        """integral of speed curve f'(x) = 2 - 2|2x - 1| with 0.5 hang time at the end"""
+        if x <= 0.25:
+            return 8 * x**2
+        elif x <= 0.5:
+            x -= 0.25
+            return 0.5 + (4*x - 8*x**2)
+        else:
+            return 1.0
 
-    def draw_onto(self, surf: pg.Surface, rect: pg.Rect, edit_mode: bool):
+    def draw_onto(self, surf: pg.Surface, rect: pg.Rect, edit_mode: bool, step_progress: float = 0.0, neighborhood = (([],) * 5,) * 5):
         s = rect.width
-        draw_color_rgb = COLOR_RBG_MAP[self.color]
-        pg.draw.circle(surf, draw_color_rgb, rect.center, s * 0.3)
+        # travel = step_progress                          # continuous constant motion
+        # travel = min(1.0, step_progress * 2)            # travel full distance during first half of step
+        # travel = max(0.0, (step_progress - 0.5) * 2)    # travel full distance during second half of step
+        travel = self.travel_curve(step_progress)
+        # print(travel)
+        self.draw_center = V2(*rect.center) + self.velocity * (rect.width - 1) * travel
+        draw_radius = s * 0.3
+
+        draw_color_rgb = self.color.rgb()
+
+        # check for intersection with other barrel
+        # if intersection found, take weighted average of colors
+        n = len(neighborhood)
+        for x in range(-n//2, n//2 + 1):
+            for y in range(-n//2, n//2 + 1):
+                if x == 0 and y == 0: continue  # skip self
+                for e in neighborhood[y + n//2][x + n//2]:
+                    if isinstance(e, Barrel):
+                        dist = (e.draw_center - self.draw_center).length()
+                        if dist < draw_radius * 2:
+                            percentage = 1.0 - dist / (2 * draw_radius)
+                            # print(f"intersecting by {dist} pixels ({percentage * 100:.0f}%)")
+                            # smoothly transition towards merged color
+                            draw_color_rgb = interpolate_colors(self.color.rgb(), (self.color + e.color).rgb(), percentage)
+        
+        pg.draw.circle(surf, draw_color_rgb, tuple(self.draw_center), draw_radius)
+
         if edit_mode:
             draw_chevron(
                 surf,
-                V2(*rect.center) + self.velocity * (s * 0.42),
+                self.draw_center + self.velocity * (s * 0.42),
                 self.velocity,
                 VELOCITY_CHEVRON_COLOR,
                 round(s * 0.25),
@@ -96,8 +145,8 @@ class ResourceTile(Carpet):
         super().__init__(True)
         self.color = color
     
-    def draw_onto(self, surf: pg.Surface, rect: pg.Rect, edit_mode: bool):
-        pg.draw.rect(surf, COLOR_RBG_MAP[self.color], rect)
+    def draw_onto(self, surf: pg.Surface, rect: pg.Rect, edit_mode: bool, step_progress: float = 0.0, neighborhood = (([],) * 5,) * 5):
+        pg.draw.rect(surf, self.color.rgb(), rect)
 
 
 class ResourceExtractor(Block):
@@ -110,7 +159,7 @@ class ResourceExtractor(Block):
         super().__init__(locked)
         self.orientation = orientation
     
-    def draw_onto(self, surf: pg.Surface, rect: pg.Rect, edit_mode: bool):
+    def draw_onto(self, surf: pg.Surface, rect: pg.Rect, edit_mode: bool, step_progress: float = 0.0, neighborhood = (([],) * 5,) * 5):
         # TEMPORARY
         s = rect.width
         w = round(s * 0.1)
@@ -138,7 +187,7 @@ class Boostpad(Carpet):
 
         self.orientation = orientation
     
-    def draw_onto(self, surf: pg.Surface, rect: pg.Rect, edit_mode: bool):
+    def draw_onto(self, surf: pg.Surface, rect: pg.Rect, edit_mode: bool, step_progress: float = 0.0, neighborhood = (([],) * 5,) * 5):
         s = rect.width
         for i in range(3):
             draw_chevron(
@@ -162,9 +211,9 @@ class Target(Carpet):
         self.color = color
         self.count = count
     
-    def draw_onto(self, surf: pg.Surface, rect: pg.Rect, edit_mode: bool):
+    def draw_onto(self, surf: pg.Surface, rect: pg.Rect, edit_mode: bool, step_progress: float = 0.0, neighborhood = (([],) * 5,) * 5):
         s = rect.width
-        pg.draw.rect(surf, COLOR_RBG_MAP[self.color], rect)
+        pg.draw.rect(surf, self.color.rgb(), rect)
         padding = s * 0.35
         radius = round(s * 0.2)
         pg.draw.rect(surf, (255, 255, 255), rect.inflate(-padding, -padding), border_radius=radius)

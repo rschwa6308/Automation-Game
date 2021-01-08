@@ -10,9 +10,8 @@ import pygame.freetype
 from math import floor, ceil
 
 from engine import Level
-from levels import test_level
-from helpers import Direction, V2, draw_chevron, render_text_centered
-from colors import Color, COLOR_RBG_MAP
+from levels import test_level, test_level2
+from helpers import Direction, V2, draw_chevron, render_text_centered, clamp
 
 
 # Display-Related Constants
@@ -46,7 +45,7 @@ MAX_GRID_LINE_WIDTH       = 5
 
 
 # Misc Constants
-LEVEL_STEP_INTERVAL = 800   # milliseconds
+LEVEL_STEP_INTERVAL = 1000  # milliseconds
 
 
 class Camera:
@@ -60,7 +59,7 @@ class Camera:
 
     def __init__(self, center: V2, zoom_level: float):
         self.center = center
-        self.zoom_level = zoom_level # clamp(zoom_level, self.min_zoom_level, self.max_zoom_level)
+        self.zoom_level = clamp(zoom_level, self.min_zoom_level, self.max_zoom_level)
     
     def pan(self, disp: V2):
         """translate `center` by the given displacement (scaled according to zoom level)"""
@@ -116,6 +115,7 @@ class LevelRunner:
 
         self.edit_mode = True
         self.shelf_state = "open"   # "open", "closed", "opening", or "closing"
+        self.step_progress = 0.0    # float in [0, 1] denoting fraction of current step completed (for animation)
 
         # initialize camera to contain `level.board` (with some margin)
         rect = level.board.get_bounding_rect(margin=3)   # arbitrary value
@@ -175,8 +175,6 @@ class LevelRunner:
                 elif event.type == pg.MOUSEMOTION:
                     self.mouse_pos = V2(*event.pos)
                     self.handle_mousemotion(event.rel)
-                    # print(self.mouse_pos)
-                    # print(self.camera.get_world_coords(self.mouse_pos, self.screen_width, self.screen_height))
             
             self.handle_keys_pressed()
             
@@ -186,14 +184,16 @@ class LevelRunner:
             # handle level execution
             if not self.edit_mode:
                 self.prev_step_elapsed += clock.get_time()
-                # print(time - self.prev_step_time)
+                # if enough time has elapsed, step the level
                 if self.prev_step_elapsed > LEVEL_STEP_INTERVAL:
                     self.level.step()
                     self.prev_step_elapsed = 0
-                    self.viewport_changed = True
                     if self.level.won:
                         print("good job")
                         # TODO: show congrats screen or something
+                # update step progress
+                self.step_progress = self.prev_step_elapsed / LEVEL_STEP_INTERVAL
+                self.viewport_changed = True
             
             # handle output
             if self.window_size_changed:
@@ -222,7 +222,13 @@ class LevelRunner:
                     rect = pg.Rect(*self.mouse_pos, s + 1, s + 1)
                     rect.move_ip(*(-self.hold_point * s - V2(1, 1)))
                     self.held_entity.draw_onto(self.screen, rect, self.edit_mode)
-                pg.display.update()
+                # pg.display.update()
+            
+            # TEMPORARY
+            fps = round(clock.get_fps())
+            pg.draw.rect(self.screen, (0, 0, 0), pg.Rect(0, 0, 30, 30))
+            render_text_centered(self.palette_font, str(fps), (255, 255, 255), self.screen, (15, 15))
+            pg.display.update()
                 
 
     def handle_window_resize(self, new_width, new_height):
@@ -346,15 +352,16 @@ class LevelRunner:
             self.reblit_needed = True
 
     def draw_level(self):
-        """draw the level onto `viewport_surf`"""
+        """draw the level onto `viewport_surf` using `self.step_progress` for animation state"""
+        # TODO: draw grid first (???)
+        self.viewport_surf.fill(VIEWPORT_BG_COLOR)
+
         s = self.camera.get_cell_size_px()
         surf_center = V2(*self.viewport_surf.get_rect().center)
         surf_width, surf_height = self.viewport_surf.get_size()
 
         def grid_to_px(pos: V2) -> V2:
             return (surf_center + (pos - self.camera.center) * s).floor()
-        
-        self.viewport_surf.fill(VIEWPORT_BG_COLOR)
 
         w = surf_width / s
         h = surf_height / s
@@ -365,15 +372,33 @@ class LevelRunner:
             ceil(h) + 2
         )
 
+        # choose the most efficient iteration method
+        # if this ever proves insufficient (doubtful), use a more efficient data structure in `Board` (e.g. k-d tree)
+        if grid_rect.width * grid_rect.height < self.level.board.get_cell_count():
+            grid_pos_iterator = (
+                V2(*grid_rect.topleft) + V2(x, y)
+                for y in range(grid_rect.height)
+                for x in range(grid_rect.width)
+            )
+        else:
+            # when zoomed out, this will almost always be preferred
+            grid_pos_iterator = (
+                pos for pos, _ in self.level.board.get_cells()
+                if grid_rect.collidepoint(*pos)
+            )
+
         # draw board
-        for x in range(grid_rect.width):
-            for y in range(grid_rect.height):
-                grid_pos = V2(*grid_rect.topleft) + V2(x, y)
-                draw_pos = grid_to_px(grid_pos)
-                cell = self.level.board.get(*grid_pos)
-                for e in sorted(cell, key=lambda e: e.draw_precedence):
-                    rect = pg.Rect(*draw_pos, s + 1, s + 1)
-                    e.draw_onto(self.viewport_surf, rect, self.edit_mode)
+        for grid_pos in grid_pos_iterator:
+            cell = self.level.board.get(*grid_pos)
+            if not cell: continue
+            draw_pos = grid_to_px(grid_pos)
+            neighborhood = [
+                [self.level.board.get(*(grid_pos + V2(x_offset, y_offset))) for x_offset in range(-2, 3)]
+                for y_offset in range(-2, 3)
+            ]
+            for e in sorted(cell, key=lambda e: e.draw_precedence):
+                rect = pg.Rect(*draw_pos, s + 1, s + 1)
+                e.draw_onto(self.viewport_surf, rect, self.edit_mode, self.step_progress, neighborhood)
 
         # draw grid with dynamic line width
         grid_line_width = round(DEFAULT_GRID_LINE_WIDTH * self.camera.zoom_level ** 0.5)
@@ -429,4 +454,4 @@ class LevelRunner:
 
 
 if __name__ == "__main__":
-    LevelRunner(test_level).run()
+    LevelRunner(test_level2).run()

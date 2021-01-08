@@ -15,7 +15,8 @@ class Board:
     def __init__(self, cells: board_type = {}):
         if not all(all(isinstance(e, Entity) for e in cell) for cell in cells.values()):
             raise ValueError("Invalid board contents; cells can only contain `Entity`s")
-
+        
+        cells = {k: v for k, v in cells.items() if v}   # eliminate empty cells
         self.cells = cells
     
     def get(self, x, y):
@@ -29,6 +30,10 @@ class Board:
         """returns a generator containing all non-empty cells (with positions)"""
         for pos, cell in self.cells.items():
             yield V2(*pos), cell
+    
+    def get_cell_count(self):
+        """returns the number of non-empty cells"""
+        return len(self.cells)
 
     def get_all(self, filter_type: Type[Entity] = Entity):
         """returns a generator containing all present entities (with positions)"""
@@ -144,11 +149,11 @@ class Level:
     
     def step(self):
         """step the level one time unit"""
-        # apply resource extractors
-        self.apply_resource_extractors()
-
         # apply translations
         self.apply_translations()
+
+        # apply resource extractors
+        self.apply_resource_extractors()
 
         # apply merges
         self.apply_merges()
@@ -190,7 +195,7 @@ class Level:
             mergable = [e for e in cell if e.merges]
             if len(mergable) > 1:
                 # merge repeatably
-                res = reduce(lambda a, b: a + b, mergable[1:], mergable[0])
+                res = sum(mergable[1:], mergable[0])
                 self.board.remove(*pos, *mergable)
                 self.board.insert(*pos, res)
     

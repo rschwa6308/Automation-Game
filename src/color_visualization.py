@@ -1,7 +1,7 @@
 import enum
 import pygame as pg
 
-from colors import Color, COLOR_RBG_MAP
+from colors import Color, COLOR_RGB_MAP
 
 
 
@@ -35,7 +35,7 @@ def show_color_grid(grid):
                     CELL_SIZE_PX - 2 * CELL_PADDING_PX,
                     CELL_SIZE_PX - 2 * CELL_PADDING_PX
                 )
-                pg.draw.rect(screen, COLOR_RBG_MAP[color], rect)
+                pg.draw.rect(screen, COLOR_RGB_MAP[color], rect)
 
     pg.display.update()
 

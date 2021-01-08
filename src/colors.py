@@ -34,12 +34,15 @@ class Color(Enum):# (R, Y, B)
             if sum(midpoint) < 4:   # colors do not have a perfect midpoint; shift towards tertiary
                 midpoint[max([0, 1, 2], key=lambda i: midpoint[i])] += 1
             return Color(tuple(midpoint))
+    
+    def rgb(self):
+        return COLOR_RGB_MAP[self]
 
 
 
 # RGB values taken from https://en.wikipedia.org/wiki/Tertiary_color#/media/File:Color_star-en_(tertiary_names).svg
 # names do not match up exactly (e.g. "violet")
-COLOR_RBG_MAP = {
+COLOR_RGB_MAP = {
     Color.RED:              (254, 39, 18),
     Color.RED_ORANGE:       (253, 83, 8),
     Color.ORANGE:           (251, 153, 2),
