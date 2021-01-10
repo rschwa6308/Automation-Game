@@ -29,3 +29,24 @@ test_board2 = Board({
     })
 
 test_level2 = Level(test_board2, Palette())
+
+
+# dirs = list(Direction)
+# dirs.remove(Direction.NONE)
+
+# cells = {(0, 0): [ResourceTile(Color.BLUE), ResourceExtractor(choice(dirs))]}
+
+# for x in range(-5, 6):
+#     for y in range(-5, 6):
+#         if x == 0 and y == 0: continue
+#         options = list(dirs)
+#         for neighbor in ((x - 1, y), (x, y - 1)):
+#             if neighbor in cells:
+#                 print(cells[neighbor][-1].orientation.rot90(2))
+#                 try: options.remove(cells[neighbor][-1].orientation.rot90(2))
+#                 except: pass
+#         cells[(x, y)] = [Boostpad(choice(options))]
+
+# # print(cells)
+
+# random_level = Level(Board(cells), Palette())

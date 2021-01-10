@@ -1,7 +1,8 @@
 # --- Level Entities --- #
 from __future__ import annotations  # allows self-reference in type annotations
-from typing import Collection, Tuple, Union
+from typing import Collection, Sequence, Tuple, Union
 from abc import abstractmethod
+from widgets import DirectionEditor, SmallIntEditor, Widget
 
 from helpers import V2, Direction, draw_aacircle, draw_chevron, draw_rectangle, render_text_centered, interpolate_colors, sgn
 from colors import Color
@@ -27,6 +28,7 @@ class Entity:
 
     def __init__(self, locked: bool):
         self.locked = locked
+        self.widgets: Sequence[Widget] = []
 
     @abstractmethod
     def draw_onto(
@@ -172,12 +174,17 @@ class ResourceExtractor(Block):
     name = "Resource Extractor"
     ascii_str = "X"
     orients = True
-    period = 3
 
     # resource extractors are unlocked by default
     def __init__(self, orientation: Direction = Direction.NORTH, locked: bool = False):
         super().__init__(locked)
         self.orientation = orientation
+        self.period = 3
+        self.phase = 1
+        self.widgets = [
+            DirectionEditor(self, "orientation"),
+            SmallIntEditor(self, "period")
+        ]   # test widgets
     
     def draw_onto(self, surf: pg.Surface, rect: pg.Rect, edit_mode: bool, selected: bool = False, step_progress: float = 0.0, neighborhood = (([],) * 5,) * 5):
         # TEMPORARY
@@ -192,7 +199,7 @@ class ResourceExtractor(Block):
             (220, 220, 220),
             round(s * 0.28),
             w,
-            angle=100
+            angle=108
         )
 
         if selected:

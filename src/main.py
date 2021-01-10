@@ -15,33 +15,39 @@ from helpers import Direction, V2, draw_chevron, render_text_centered, clamp
 
 
 # Display-Related Constants
-DEFAULT_SCREEN_WIDTH  = 1000
-DEFAULT_SCREEN_HEIGHT = 800
+DEFAULT_SCREEN_WIDTH    = 1000
+DEFAULT_SCREEN_HEIGHT   = 800
 
-MIN_SCREEN_WIDTH  = 300
-MIN_SCREEN_HEIGHT = 200
+MIN_SCREEN_WIDTH        = 300
+MIN_SCREEN_HEIGHT       = 200
 
-TARGET_FPS = 60
+TARGET_FPS              = 60
 
 
 # Layout-Related Constants
-SHELF_HEIGHT          = 100 # pixels
-SHELF_ANIMATION_SPEED = 15  # pixels per frame
+DEFAULT_CELL_SIZE       = 64    # pixels
 
-DEFAULT_CELL_SIZE     = 64 # pixels
+SHELF_HEIGHT            = 100   # pixels
+EDITOR_WIDTH            = 200   # pixels
 
-PALETTE_ITEM_SIZE     = 64  # pixels
-PALETTE_ITEM_SPACING  = 8   # pixels
+SHELF_ANIMATION_SPEED   = 15    # pixels per frame
+EDITOR_ANIMATION_SPEED  = 30    # pixels per frame
+
+PALETTE_ITEM_SIZE       = 64    # pixels
+PALETTE_ITEM_SPACING    = 8     # pixels
+EDITOR_WIDGET_SPACING   = 8     # pixels
+
 
 
 # Aesthetics-Related Constants
-SHELF_BG_COLOR            = (127, 127, 127, 191)
-VIEWPORT_BG_COLOR         = (255, 255, 255)
-GRID_LINE_COLOR           = (0, 0, 0)
+VIEWPORT_BG_COLOR           = (255, 255, 255)
+SHELF_BG_COLOR              = (127, 127, 127, 230)
+EDITOR_BG_COLOR             = (127, 127, 127, 230)
+GRID_LINE_COLOR             = (0, 0, 0)
 
-DEFAULT_GRID_LINE_WIDTH   = 2
-MIN_GRID_LINE_WIDTH       = 1
-MAX_GRID_LINE_WIDTH       = 5
+DEFAULT_GRID_LINE_WIDTH     = 2
+MIN_GRID_LINE_WIDTH         = 1
+MAX_GRID_LINE_WIDTH         = 5
 
 
 # Misc Constants
@@ -109,14 +115,16 @@ class LevelRunner:
         self.screen_width = DEFAULT_SCREEN_WIDTH
         self.screen_height = DEFAULT_SCREEN_HEIGHT
         self.shelf_height_onscreen = SHELF_HEIGHT
+        self.editor_width_onscreen = 0
 
         self.keys_pressed = set()
         self.mouse_buttons_pressed = set()
         self.mouse_pos = V2(0, 0)
 
         self.edit_mode = True
-        self.shelf_state = "open"   # "open", "closed", "opening", or "closing"
-        self.step_progress = 0.0    # float in [0, 1] denoting fraction of current step completed (for animation)
+        self.shelf_state = "open"       # "open", "closed", "opening", or "closing"
+        self.editor_state = "closed"    # "open", "closed", "opening", or "closing"
+        self.step_progress = 0.0        # float in [0, 1] denoting fraction of current step completed (for animation)
 
         # initialize camera to contain `level.board` (with some margin)
         rect = level.board.get_bounding_rect(margin=3)   # arbitrary value
@@ -124,10 +132,11 @@ class LevelRunner:
         self.camera = Camera(center=V2(*rect.center), zoom_level=zoom_level)
 
         # initialize refresh sentinels
-        self.window_size_changed = False
-        self.viewport_changed = False
-        self.shelf_changed = False
-        self.reblit_needed = False
+        self.window_size_changed    = False
+        self.viewport_changed       = False
+        self.shelf_changed          = False
+        self.editor_changed         = False
+        self.reblit_needed          = False
 
         self.held_entity: Union[Entity, None] = None
         self.hold_point: V2 = V2(0, 0)  # in [0, 1]^2
@@ -143,11 +152,12 @@ class LevelRunner:
 
         pg.freetype.init()
         self.palette_font = pg.freetype.SysFont("Arial", 16, bold=True)
+        self.editor_font = pg.freetype.SysFont("Arial", 16, bold=True)
 
-        # initialize `viewport_surf`, `shelf_surf`, and `shelf_rect`
-        # self.refresh_layout()
+        # initialize surfaces
         self.draw_level()
         self.draw_shelf()
+        self.draw_editor()
 
         self.prev_step_elapsed = 0
 
@@ -181,8 +191,9 @@ class LevelRunner:
             
             self.handle_keys_pressed()
             
-            # handle shelf animation
+            # handle overlay animations
             self.handle_shelf_animation()
+            self.handle_editor_animation()
 
             # handle level execution
             if not self.edit_mode:
@@ -203,6 +214,7 @@ class LevelRunner:
                 # trigger total re-draw
                 self.viewport_changed = True
                 self.shelf_changed = True
+                self.editor_changed = True
                 self.window_size_changed = False
 
             if self.viewport_changed:
@@ -214,17 +226,24 @@ class LevelRunner:
                 self.draw_shelf()
                 self.reblit_needed = True
                 self.shelf_changed = False
+            
+            if self.editor_changed:
+                self.draw_editor()
+                self.reblit_needed = True
+                self.editor_changed = False
 
             if self.reblit_needed:
                 # blit updated surfs to the screen
                 self.screen.blit(self.viewport_surf, (0, 0))
                 self.screen.blit(self.shelf_surf, (0, self.screen_height - self.shelf_height_onscreen))
+                self.screen.blit(self.editor_surf, (self.screen_width - self.editor_width_onscreen, 0))
                 # draw held entity at cursor
                 if self.held_entity is not None:
                     s = self.camera.get_cell_size_px()
                     rect = pg.Rect(*self.mouse_pos, s + 1, s + 1)
                     rect.move_ip(*(-self.hold_point * s - V2(1, 1)))
                     self.held_entity.draw_onto(self.screen, rect, self.edit_mode)
+                self.reblit_needed = False
                 # pg.display.update()
             
             # TEMPORARY
@@ -238,8 +257,10 @@ class LevelRunner:
         self.screen_height = max(new_height, MIN_SCREEN_HEIGHT)
         self.screen = pg.display.set_mode((self.screen_width, self.screen_height), pg.RESIZABLE)
         self.window_size_changed = True
+
         self.viewport_surf = pg.Surface((self.screen_width, self.screen_height))
         self.shelf_surf = pg.Surface((self.screen_width, SHELF_HEIGHT), pg.SRCALPHA)
+        self.editor_surf = pg.Surface((EDITOR_WIDTH, self.screen_height - SHELF_HEIGHT), pg.SRCALPHA)
 
     def handle_shelf_animation(self):
         if self.shelf_state == "closing":
@@ -247,13 +268,27 @@ class LevelRunner:
             if self.shelf_height_onscreen <= 0:
                 self.shelf_height_onscreen = 0
                 self.shelf_state = "closed"
-            self.shelf_changed = True
+            self.reblit_needed = True
         elif self.shelf_state == "opening":
             self.shelf_height_onscreen += SHELF_ANIMATION_SPEED
             if self.shelf_height_onscreen >= SHELF_HEIGHT:
                 self.shelf_height_onscreen = SHELF_HEIGHT
                 self.shelf_state = "open"
-            self.shelf_changed = True
+            self.reblit_needed = True
+
+    def handle_editor_animation(self):
+        if self.editor_state == "closing":
+            self.editor_width_onscreen -= EDITOR_ANIMATION_SPEED
+            if self.editor_width_onscreen <= 0:
+                self.editor_width_onscreen = 0
+                self.editor_state = "closed"
+            self.reblit_needed = True
+        elif self.editor_state == "opening":
+            self.editor_width_onscreen += EDITOR_ANIMATION_SPEED
+            if self.editor_width_onscreen >= EDITOR_WIDTH:
+                self.editor_width_onscreen = EDITOR_WIDTH
+                self.editor_state = "open"
+            self.reblit_needed = True
 
     def handle_keydown(self, key):
         if key == pg.K_ESCAPE:
@@ -264,6 +299,7 @@ class LevelRunner:
                 if self.edit_mode and self.held_entity is None:
                     self.selected_entity = None     # deselect
                     self.shelf_state = "closing"
+                    self.editor_state = "closing"
                     self.edit_mode = False
                     self.level.save_state()         # freeze current board/palette state
                     self.viewport_changed = True
@@ -331,9 +367,11 @@ class LevelRunner:
                         # deselect current selection if picking up something else
                         if self.selected_entity is not self.held_entity:
                             self.selected_entity = None
+                            self.editor_state = "closing"
                         self.viewport_changed = True
                 else:
                     self.selected_entity = None
+                    self.editor_state = "closing"
                     self.viewport_changed = True
    
     def handle_mousebuttonup(self, button):
@@ -352,7 +390,9 @@ class LevelRunner:
                 # select entity that was just dropped
                 self.selected_entity = self.held_entity
                 self.held_entity = None
+                self.editor_state = "opening"
                 self.viewport_changed = True
+                self.editor_changed = True
 
     def handle_mousemotion(self, rel):
         # pan camera if right click is held
@@ -467,6 +507,29 @@ class LevelRunner:
                 pg.draw.circle(self.shelf_surf, (255, 0, 0), rect.topright, 14)
                 render_text_centered(self.palette_font, str(count), (255, 255, 255), self.shelf_surf, rect.topright, 28)
 
+    def draw_editor(self):
+        self.editor_surf.fill(EDITOR_BG_COLOR)
+
+        if self.editor_state == "closed" or self.selected_entity is None:
+            return      # NoOp
+
+        # render header
+        render_text_centered(
+            self.editor_font,
+            self.selected_entity.name,
+            (255, 255, 255),
+            self.editor_surf,
+            (EDITOR_WIDTH // 2, 20),
+            24
+        )
+
+        # draw widgets
+        y_pos = 40
+        for w in self.selected_entity.widgets:
+            h = EDITOR_WIDTH / w.aspect_ratio
+            rect = pg.Rect(0, y_pos, EDITOR_WIDTH, h)
+            w.draw_onto(self.editor_surf, rect)
+            y_pos += h + EDITOR_WIDGET_SPACING
 
 
 if __name__ == "__main__":

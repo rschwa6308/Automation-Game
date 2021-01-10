@@ -173,7 +173,7 @@ class Level:
     
     def apply_resource_extractors(self):
         for pos, e in list(self.board.get_all(filter_type=ResourceExtractor)):     # list() avoids concurrent modification
-            if self.step_count % e.period == 0:
+            if self.step_count % e.period == e.phase - 1:
                 for d in self.board.get(*pos):
                     if isinstance(d, ResourceTile):
                         # spawn (at most) one new barrel here
