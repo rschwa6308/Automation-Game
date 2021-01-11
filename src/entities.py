@@ -218,6 +218,9 @@ class Boostpad(Carpet):
             raise ValueError("Boostpad orientation cannot be `Direction.NONE`")
 
         self.orientation = orientation
+        self.widgets = [
+            DirectionEditor(self, "orientation")
+        ]
     
     def draw_onto(self, surf: pg.Surface, rect: pg.Rect, edit_mode: bool, selected: bool = False, step_progress: float = 0.0, neighborhood = (([],) * 5,) * 5):
         s = rect.width        
@@ -238,7 +241,7 @@ class Boostpad(Carpet):
 class Target(Carpet):
     name = "Target"
     ascii_str = "T"
-    count_font = pg.freetype.SysFont("arial", 20)
+    # count_font = pg.freetype.SysFont("arial", 20)
 
     # targets are always locked
     def __init__(self, color: Color, count: int):
@@ -252,14 +255,12 @@ class Target(Carpet):
         padding = s * 0.35
         radius = round(s * 0.2)
         pg.draw.rect(surf, (255, 255, 255), rect.inflate(-padding, -padding), border_radius=radius)
-        # TODO: use `Font.get_sizes()` to change font size
         render_text_centered(
-            self.count_font,
             str(self.count),
             (0, 0, 0),
             surf,
             rect.center,
-            s - padding * 1.75
+            s - padding * 1.75,
         )
 
         if selected:

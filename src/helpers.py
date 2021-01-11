@@ -3,6 +3,7 @@ import math
 
 import pygame as pg
 import pygame.gfxdraw
+import pygame.freetype
 
 
 class V2:
@@ -78,11 +79,11 @@ class Direction(V2, Enum):
         
 
 
-def draw_chevron(surf: pg.Surface, dest: V2, orientation: V2, color, length: int, width: int, angle: int = 90):
+def draw_chevron(surf: pg.Surface, dest: V2, orientation: V2, color, length: int, width: int, angle: int = 90) -> pg.Rect:
     """draws a chevron on `surf` pointing in the given orientation with the tip at `dest`"""
     a = dest - orientation.rotate(angle // 2) * length
     b = dest - orientation.rotate(-angle // 2) * length
-    pg.draw.polygon(
+    return pg.draw.polygon(
         surf,
         color,
         [
@@ -96,11 +97,15 @@ def draw_chevron(surf: pg.Surface, dest: V2, orientation: V2, color, length: int
     )
 
 
-def render_text_centered(font, text, color, surf, dest, height):
+pg.freetype.init()
+default_font = pg.freetype.SysFont("Arial", 16)
+
+def render_text_centered(text, color, surf, dest, height, bold=False):
     # print(font.get_sizes())
     s = round(height)
     # s = max([rec for rec in font.get_sizes() if rec[1] <= height], key=lambda rec: rec[1])[0]
-    text_img, text_rect = font.render(text, fgcolor=color, size=s)
+    style = pg.freetype.STYLE_STRONG if bold else pg.freetype.STYLE_DEFAULT
+    text_img, text_rect = default_font.render(text, fgcolor=color, size=s, style=style)
     surf.blit(
         text_img,
         (dest[0] - text_rect.width / 2, dest[1] - text_rect.height / 2)

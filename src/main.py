@@ -4,6 +4,7 @@ from typing import Union, Type, Sequence, Tuple
 
 # from animations import Animation
 from entities import Barrel, Entity
+from widgets import Widget
 os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"   # cringe
 import pygame as pg
 import pygame.freetype
@@ -144,6 +145,7 @@ class LevelRunner:
         self.selected_entity: Union[Entity, None] = None
 
         self.palette_rects: Sequence[Tuple[pg.Rect, Type[Entity]]] = [] # store palette item rects for easier collision
+        self.widget_rects: Sequence[Tuple[pg.Rect, Widget]] = []        # store widget rects for easier collision
 
     def run(self):
         """run the level in a resizable window at `TARGET_FPS`"""
@@ -151,8 +153,8 @@ class LevelRunner:
         self.handle_window_resize(DEFAULT_SCREEN_WIDTH, DEFAULT_SCREEN_HEIGHT)
 
         pg.freetype.init()
-        self.palette_font = pg.freetype.SysFont("Arial", 16, bold=True)
-        self.editor_font = pg.freetype.SysFont("Arial", 16, bold=True)
+        # self.palette_font = pg.freetype.SysFont("Arial", 16, bold=True)
+        # self.editor_font = pg.freetype.SysFont("Arial", 16, bold=True)
 
         # initialize surfaces
         self.draw_level()
@@ -249,7 +251,7 @@ class LevelRunner:
             # TEMPORARY
             fps = round(clock.get_fps())
             pg.draw.rect(self.screen, (0, 0, 0), pg.Rect(0, 0, 30, 30))
-            render_text_centered(self.palette_font, str(fps), (255, 255, 255), self.screen, (15, 15), 30)
+            render_text_centered(str(fps), (255, 255, 255), self.screen, (15, 15), 30)
             pg.display.update()
                 
     def handle_window_resize(self, new_width, new_height):
@@ -314,6 +316,7 @@ class LevelRunner:
             if e and e.orients:
                 e.orientation = e.orientation.rot90(1)
                 self.viewport_changed = True
+                self.editor_changed = True
 
     def handle_keyup(self, key):
         pass
@@ -352,6 +355,16 @@ class LevelRunner:
                         self.hold_point = V2(0.5, 0.5)
                         self.level.palette.remove(self.held_entity)
                         self.shelf_changed = True
+            elif self.mouse_pos.x >= self.screen_width - self.editor_width_onscreen:
+                # cursor is over editor
+                adjusted_pos = self.mouse_pos - V2(self.screen_width - self.editor_width_onscreen, 0)
+                for hitbox, widget in self.widget_rects:
+                    if hitbox.collidepoint(*adjusted_pos):
+                        widget.handle_click(adjusted_pos)
+                        self.editor_changed = True      # just redraw every time (easier)
+                        self.viewport_changed = True    # ^^^
+                        break
+
             else:
                 # cursor is over board
                 pos_float = self.camera.get_world_coords(self.mouse_pos, self.screen_width, self.screen_height)
@@ -505,7 +518,7 @@ class LevelRunner:
                 temp_entity.draw_onto(self.shelf_surf, rect, edit_mode=True)
                 # pg.draw.rect(self.shelf_surf, (0, 255, 0), rect)
                 pg.draw.circle(self.shelf_surf, (255, 0, 0), rect.topright, 14)
-                render_text_centered(self.palette_font, str(count), (255, 255, 255), self.shelf_surf, rect.topright, 28)
+                render_text_centered(str(count), (255, 255, 255), self.shelf_surf, rect.topright, 22, bold=True)
 
     def draw_editor(self):
         self.editor_surf.fill(EDITOR_BG_COLOR)
@@ -515,20 +528,22 @@ class LevelRunner:
 
         # render header
         render_text_centered(
-            self.editor_font,
             self.selected_entity.name,
-            (255, 255, 255),
+            (0, 0, 0),
             self.editor_surf,
             (EDITOR_WIDTH // 2, 20),
-            24
+            24,
+            bold=True
         )
 
         # draw widgets
+        self.widget_rects.clear()
         y_pos = 40
         for w in self.selected_entity.widgets:
             h = EDITOR_WIDTH / w.aspect_ratio
             rect = pg.Rect(0, y_pos, EDITOR_WIDTH, h)
             w.draw_onto(self.editor_surf, rect)
+            self.widget_rects.append((rect, w))
             y_pos += h + EDITOR_WIDGET_SPACING
 
 
