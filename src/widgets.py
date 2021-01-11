@@ -1,9 +1,8 @@
 # --- UI-Widgets for the Editor Panel --- #
-from typing import Callable, Tuple
+from typing import Tuple
 import pygame as pg
-from pygame.freetype import get_default_font
 
-from helpers import V2, Direction, clamp, draw_aacircle, draw_chevron, draw_rectangle, render_text_centered, render_text_left_justified
+from helpers import V2, Direction, clamp, draw_chevron, draw_rectangle, render_text_centered, render_text_left_justified
 
 
 FONT_SIZE = 20
