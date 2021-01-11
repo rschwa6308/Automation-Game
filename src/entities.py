@@ -2,7 +2,7 @@
 from __future__ import annotations  # allows self-reference in type annotations
 from typing import Collection, Sequence, Tuple, Union
 from abc import abstractmethod
-from widgets import DirectionEditor, SmallIntEditor, Widget
+from widgets import DirectionEditor, SmallIntEditor, Spacing, Widget
 
 from helpers import V2, Direction, draw_aacircle, draw_chevron, draw_rectangle, render_text_centered, interpolate_colors, sgn
 from colors import Color
@@ -15,7 +15,7 @@ pygame.freetype.init()
 
 
 VELOCITY_CHEVRON_COLOR      = (0, 0, 0)
-HIGHLIGHT_COLOR             = (0, 255, 255)
+HIGHLIGHT_COLOR             = (255, 255, 0)
 HIGHLIGHT_THICKNESS_MULT    = 0.10
 
 
@@ -28,7 +28,9 @@ class Entity:
 
     def __init__(self, locked: bool):
         self.locked = locked
-        self.widgets: Sequence[Widget] = []
+    
+    def get_widgets(self) -> Sequence[Widget]:
+        return []
 
     @abstractmethod
     def draw_onto(
@@ -181,10 +183,14 @@ class ResourceExtractor(Block):
         self.orientation = orientation
         self.period = 3
         self.phase = 1
-        self.widgets = [
+    
+    def get_widgets(self) -> Sequence[Widget]:
+        return [
             DirectionEditor(self, "orientation"),
-            SmallIntEditor(self, "period")
-        ]   # test widgets
+            # Spacing(20.0),
+            SmallIntEditor(self, "period", (1, 5)),
+            SmallIntEditor(self, "phase", (1, self.period)),
+        ]
     
     def draw_onto(self, surf: pg.Surface, rect: pg.Rect, edit_mode: bool, selected: bool = False, step_progress: float = 0.0, neighborhood = (([],) * 5,) * 5):
         # TEMPORARY
@@ -216,9 +222,10 @@ class Boostpad(Carpet):
         super().__init__(locked)
         if (orientation is Direction.NONE):
             raise ValueError("Boostpad orientation cannot be `Direction.NONE`")
-
         self.orientation = orientation
-        self.widgets = [
+    
+    def get_widgets(self) -> Sequence[Widget]:
+        return [
             DirectionEditor(self, "orientation")
         ]
     

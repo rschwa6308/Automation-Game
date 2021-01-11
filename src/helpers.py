@@ -1,5 +1,6 @@
 from enum import Enum
 import math
+from typing import Sequence
 
 import pygame as pg
 import pygame.gfxdraw
@@ -98,17 +99,29 @@ def draw_chevron(surf: pg.Surface, dest: V2, orientation: V2, color, length: int
 
 
 pg.freetype.init()
-default_font = pg.freetype.SysFont("Arial", 16)
+default_font = pg.freetype.SysFont("consolas", 16)      # should be monospaced (makes life easier)
+print(default_font.get_sizes())
 
 def render_text_centered(text, color, surf, dest, height, bold=False):
     # print(font.get_sizes())
-    s = round(height)
-    # s = max([rec for rec in font.get_sizes() if rec[1] <= height], key=lambda rec: rec[1])[0]
+    s = int(height)
+    # s = max([rec for rec in default_font.get_sizes() if rec[1] <= height], key=lambda rec: rec[1])[0]
     style = pg.freetype.STYLE_STRONG if bold else pg.freetype.STYLE_DEFAULT
     text_img, text_rect = default_font.render(text, fgcolor=color, size=s, style=style)
     surf.blit(
         text_img,
         (dest[0] - text_rect.width / 2, dest[1] - text_rect.height / 2)
+    )
+
+
+def render_text_left_justified(text, color, surf, dest, height, bold=False):
+    s = int(height)
+    # s = max([rec for rec in default_font.get_sizes() if rec[1] <= height], key=lambda rec: rec[1])[0]
+    style = pg.freetype.STYLE_STRONG if bold else pg.freetype.STYLE_DEFAULT
+    text_img, text_rect = default_font.render(text, fgcolor=color, size=s, style=style)
+    surf.blit(
+        text_img,
+        (dest[0], dest[1] - text_rect.height / 2)
     )
 
 
@@ -138,10 +151,24 @@ def draw_aacircle(surf, x, y, r, color):
 
 def draw_rectangle(surf, rect, color, thickness=1):
     """draws a rectangle with given draw thickness"""
-    pg.draw.rect(surf, color, pg.Rect(rect.left, rect.top, rect.width, thickness + 1))
-    pg.draw.rect(surf, color, pg.Rect(rect.left, rect.bottom - thickness, rect.width, thickness + 1))
-    pg.draw.rect(surf, color, pg.Rect(rect.left, rect.top, thickness + 1, rect.height))
-    pg.draw.rect(surf, color, pg.Rect(rect.right - thickness, rect.top, thickness + 1, rect.height))
+    # thickness += 1
+    pg.draw.rect(surf, color, pg.Rect(rect.left, rect.top, rect.width, thickness))
+    pg.draw.rect(surf, color, pg.Rect(rect.left, rect.bottom - thickness, rect.width, thickness))
+    pg.draw.rect(surf, color, pg.Rect(rect.left, rect.top, thickness, rect.height))
+    pg.draw.rect(surf, color, pg.Rect(rect.right - thickness, rect.top, thickness, rect.height))
+
+
+def wrap_text(text, line_length) -> Sequence[str]:
+    """splits the given `text` into lines of length at most `line_length` (seperating only at spaces)"""
+    words = text.split()
+    assert(all(len(word)<= line_length for word in words))  # not possible otherwise
+    lines = [[]]
+    for word in words:
+        if len(" ".join(lines[-1] + [word])) <= line_length:
+            lines[-1].append(word)
+        else:
+            lines.append([word])
+    return [" ".join(line) for line in lines]
 
 
 if __name__ == "__main__":
@@ -153,3 +180,5 @@ if __name__ == "__main__":
 
     print(Direction.NORTH)
     print(Direction.NORTH.rot90(-2))
+
+    print(wrap_text("this is a test string containing long and short words", 12))

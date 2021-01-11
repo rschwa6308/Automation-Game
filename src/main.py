@@ -12,7 +12,7 @@ from math import floor, ceil
 
 from engine import Level
 from levels import test_level, test_level2
-from helpers import Direction, V2, draw_chevron, render_text_centered, clamp
+from helpers import Direction, V2, draw_chevron, render_text_centered, clamp, wrap_text
 
 
 # Display-Related Constants
@@ -42,8 +42,8 @@ EDITOR_WIDGET_SPACING   = 8     # pixels
 
 # Aesthetics-Related Constants
 VIEWPORT_BG_COLOR           = (255, 255, 255)
-SHELF_BG_COLOR              = (127, 127, 127, 230)
-EDITOR_BG_COLOR             = (127, 127, 127, 230)
+SHELF_BG_COLOR              = (127, 127, 127, 240)  # mostly opaque
+EDITOR_BG_COLOR             = (127, 127, 127, 240)  # ^^^
 GRID_LINE_COLOR             = (0, 0, 0)
 
 DEFAULT_GRID_LINE_WIDTH     = 2
@@ -251,7 +251,7 @@ class LevelRunner:
             # TEMPORARY
             fps = round(clock.get_fps())
             pg.draw.rect(self.screen, (0, 0, 0), pg.Rect(0, 0, 30, 30))
-            render_text_centered(str(fps), (255, 255, 255), self.screen, (15, 15), 30)
+            render_text_centered(str(fps), (255, 255, 255), self.screen, (15, 15), 25)
             pg.display.update()
                 
     def handle_window_resize(self, new_width, new_height):
@@ -299,9 +299,9 @@ class LevelRunner:
             # toggle shelf state (initiates animation (if not already in progress))
             if self.shelf_state in ("open", "closed"):
                 if self.edit_mode and self.held_entity is None:
-                    self.selected_entity = None     # deselect
+                    self.deselect_entity()
                     self.shelf_state = "closing"
-                    self.editor_state = "closing"
+                    # self.editor_state = "closing"
                     self.edit_mode = False
                     self.level.save_state()         # freeze current board/palette state
                     self.viewport_changed = True
@@ -354,6 +354,7 @@ class LevelRunner:
                         self.held_entity = e_type()  # create new entity
                         self.hold_point = V2(0.5, 0.5)
                         self.level.palette.remove(self.held_entity)
+                        self.deselect_entity()
                         self.shelf_changed = True
             elif self.mouse_pos.x >= self.screen_width - self.editor_width_onscreen:
                 # cursor is over editor
@@ -364,7 +365,6 @@ class LevelRunner:
                         self.editor_changed = True      # just redraw every time (easier)
                         self.viewport_changed = True    # ^^^
                         break
-
             else:
                 # cursor is over board
                 pos_float = self.camera.get_world_coords(self.mouse_pos, self.screen_width, self.screen_height)
@@ -379,13 +379,10 @@ class LevelRunner:
                         self.level.board.remove(*pos, self.held_entity)
                         # deselect current selection if picking up something else
                         if self.selected_entity is not self.held_entity:
-                            self.selected_entity = None
-                            self.editor_state = "closing"
+                            self.deselect_entity()
                         self.viewport_changed = True
                 else:
-                    self.selected_entity = None
-                    self.editor_state = "closing"
-                    self.viewport_changed = True
+                    self.deselect_entity()
    
     def handle_mousebuttonup(self, button):
         # handle entity holding (left click)
@@ -393,19 +390,17 @@ class LevelRunner:
             if self.mouse_pos.y >= self.screen_height - self.shelf_height_onscreen:
                 # cursor is over shelf
                 self.level.palette.add(self.held_entity)
-                self.held_entity = None
                 self.shelf_changed = True
+                self.held_entity = None
+                self.deselect_entity()
             else:
                 # cursor is over board
                 pos = (self.camera.get_world_coords(self.mouse_pos, self.screen_width, self.screen_height)).floor()
                 # drop entity
                 self.level.board.insert(*pos, self.held_entity)
                 # select entity that was just dropped
-                self.selected_entity = self.held_entity
+                self.select_entity(self.held_entity)
                 self.held_entity = None
-                self.editor_state = "opening"
-                self.viewport_changed = True
-                self.editor_changed = True
 
     def handle_mousemotion(self, rel):
         # pan camera if right click is held
@@ -526,26 +521,42 @@ class LevelRunner:
         if self.editor_state == "closed" or self.selected_entity is None:
             return      # NoOp
 
+        y_pos = EDITOR_WIDGET_SPACING
+
         # render header
-        render_text_centered(
-            self.selected_entity.name,
-            (0, 0, 0),
-            self.editor_surf,
-            (EDITOR_WIDTH // 2, 20),
-            24,
-            bold=True
-        )
+        header_font_height = 26
+        for word in wrap_text(self.selected_entity.name, 12):
+            render_text_centered(
+                word,
+                (0, 0, 0),
+                self.editor_surf,
+                (EDITOR_WIDTH // 2, y_pos + header_font_height // 2),
+                header_font_height,
+                bold=True
+            )
+            y_pos += header_font_height
 
         # draw widgets
+        y_pos += EDITOR_WIDGET_SPACING
         self.widget_rects.clear()
-        y_pos = 40
-        for w in self.selected_entity.widgets:
+        for w in self.selected_entity.get_widgets():
             h = EDITOR_WIDTH / w.aspect_ratio
             rect = pg.Rect(0, y_pos, EDITOR_WIDTH, h)
             w.draw_onto(self.editor_surf, rect)
             self.widget_rects.append((rect, w))
             y_pos += h + EDITOR_WIDGET_SPACING
 
+    def select_entity(self, entity: Entity):
+        self.selected_entity = entity
+        self.editor_state = "opening"
+        self.viewport_changed = True
+        self.editor_changed = True
+    
+    def deselect_entity(self):
+        self.selected_entity = None
+        self.editor_state = "closing"
+        self.viewport_changed = True
+        self.editor_changed = True
 
 if __name__ == "__main__":
     LevelRunner(test_level2).run()
