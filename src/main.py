@@ -47,7 +47,7 @@ MAX_GRID_LINE_WIDTH         = 5
 
 
 # Misc Constants
-LEVEL_STEP_INTERVAL = 1000  # milliseconds
+LEVEL_STEP_INTERVAL = 1000 / 5  # milliseconds
 
 
 class Camera:
