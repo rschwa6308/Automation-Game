@@ -1,8 +1,8 @@
 # --- Internal Level Representation and Gamerules --- #
 from typing import Collection, Mapping, Tuple, Type, Sequence
 from functools import reduce
-import pygame as pg             # for type hints
 from copy import deepcopy
+import pygame as pg             # for type hints
 
 from entities import *
 from helpers import V2
@@ -26,10 +26,30 @@ class Board:
         else:
             return tuple()
     
-    def get_cells(self):
-        """returns a generator containing all non-empty cells (with positions)"""
-        for pos, cell in self.cells.items():
-            yield V2(*pos), cell
+    def get_cells(self, window: pg.Rect = None):
+        """returns a generator containing all non-empty cells (along with positions) contained within `window`"""
+        if window is None:
+            for pos, cell in self.cells.items():
+                yield V2(*pos), cell
+        else:
+            # choose the most efficient iteration method
+            # if this ever proves insufficient (doubtful), use a more efficient data structure (e.g. 2D range tree)
+            if window.width * window.height < self.get_cell_count():
+                for x in range(window.width):
+                    for y in range(window.height):
+                        pos = (window.left + x, window.top + y)
+                        if pos in self.cells:
+                            yield V2(*pos), self.cells[pos]
+                return (
+                    V2(*window.topleft) + V2(x, y)
+                    for y in range(window.height)
+                    for x in range(window.width)
+                )
+            else:
+                # when window is large, this will almost always be preferred
+                for pos, cell in self.cells.items():
+                    if window.collidepoint(*pos):
+                        yield V2(*pos), cell
     
     def get_cell_count(self):
         """returns the number of non-empty cells"""
@@ -88,9 +108,6 @@ class Board:
             " ".join(get_ascii_str(cell) for cell in row)
             for row in grid     # do not flip y-axis
         )
-
-    # def __copy__(self):
-    #     return Board(copy(self.cells))
 
 
 class Palette:

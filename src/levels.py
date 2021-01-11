@@ -1,5 +1,8 @@
+from random import choice
+
 from engine import Board, Level, Palette
 from entities import *
+
 
 
 test_board = Board({
@@ -17,7 +20,6 @@ test_palette = Palette({
 test_level = Level(test_board, test_palette)
 
 
-from random import choice
 # a, b = choice(list(Color)), choice(list(Color))
 a, b = Color.RED, Color.BLUE
 

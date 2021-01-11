@@ -1,17 +1,15 @@
 # --- Level Entities --- #
 from __future__ import annotations  # allows self-reference in type annotations
-from typing import Collection, Sequence, Tuple, Union
+from typing import Sequence
 from abc import abstractmethod
-from widgets import DirectionEditor, SmallIntEditor, Spacing, Widget
-
-from helpers import V2, Direction, draw_aacircle, draw_chevron, draw_rectangle, render_text_centered, interpolate_colors, sgn
-from colors import Color
 
 import pygame as pg
 import pygame.freetype
 import pygame.gfxdraw
 
-pygame.freetype.init()
+from helpers import V2, Direction, draw_aacircle, draw_chevron, draw_rectangle, render_text_centered, interpolate_colors, sgn
+from colors import Color
+from widgets import DirectionEditor, SmallIntEditor, Spacing, Widget
 
 
 VELOCITY_CHEVRON_COLOR      = (0, 0, 0)
@@ -137,8 +135,6 @@ class Barrel(Block):
         
         # pg.draw.circle(surf, draw_color_rgb, tuple(self.draw_center), draw_radius)
         draw_aacircle(surf, *round(self.draw_center), round(draw_radius), draw_color_rgb)
-        # pg.gfxdraw.aacircle(surf, *round(self.draw_center), draw_radius, draw_color_rgb)
-        # pg.gfxdraw.filled_circle(surf, *round(self.draw_center), draw_radius, draw_color_rgb)
 
         if edit_mode:
             draw_chevron(
@@ -248,7 +244,6 @@ class Boostpad(Carpet):
 class Target(Carpet):
     name = "Target"
     ascii_str = "T"
-    # count_font = pg.freetype.SysFont("arial", 20)
 
     # targets are always locked
     def __init__(self, color: Color, count: int):

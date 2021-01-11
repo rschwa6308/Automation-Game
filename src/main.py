@@ -1,18 +1,13 @@
 # --- Rendering and UI --- #
-import os
 from typing import Union, Type, Sequence, Tuple
-
-# from animations import Animation
-from entities import Barrel, Entity
-from widgets import Widget
-os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"   # cringe
-import pygame as pg
-import pygame.freetype
 from math import floor, ceil
+import pygame as pg
 
+from entities import Entity
+from widgets import Widget
 from engine import Level
 from levels import test_level, test_level2
-from helpers import Direction, V2, draw_chevron, render_text_centered, clamp, wrap_text
+from helpers import V2, render_text_centered, clamp, wrap_text
 
 
 # Display-Related Constants
@@ -152,10 +147,6 @@ class LevelRunner:
         # initialize display, initialize output surfaces, and adjust camera
         self.handle_window_resize(DEFAULT_SCREEN_WIDTH, DEFAULT_SCREEN_HEIGHT)
 
-        pg.freetype.init()
-        # self.palette_font = pg.freetype.SysFont("Arial", 16, bold=True)
-        # self.editor_font = pg.freetype.SysFont("Arial", 16, bold=True)
-
         # initialize surfaces
         self.draw_level()
         self.draw_shelf()
@@ -246,13 +237,13 @@ class LevelRunner:
                     rect.move_ip(*(-self.hold_point * s - V2(1, 1)))
                     self.held_entity.draw_onto(self.screen, rect, self.edit_mode)
                 self.reblit_needed = False
-                # pg.display.update()
+                pg.display.update()
             
             # TEMPORARY
-            fps = round(clock.get_fps())
-            pg.draw.rect(self.screen, (0, 0, 0), pg.Rect(0, 0, 30, 30))
-            render_text_centered(str(fps), (255, 255, 255), self.screen, (15, 15), 25)
-            pg.display.update()
+            # fps = round(clock.get_fps())
+            # pg.draw.rect(self.screen, (0, 0, 0), pg.Rect(0, 0, 30, 30))
+            # render_text_centered(str(fps), (255, 255, 255), self.screen, (15, 15), 25)
+            # pg.display.update()
                 
     def handle_window_resize(self, new_width, new_height):
         self.screen_width = max(new_width, MIN_SCREEN_WIDTH)
@@ -405,7 +396,6 @@ class LevelRunner:
     def handle_mousemotion(self, rel):
         # pan camera if right click is held
         if 3 in self.mouse_buttons_pressed:
-            # print(rel)
             disp = V2(*rel) / self.camera.get_cell_size_px()
             self.camera.pan_abs(-disp)
             self.viewport_changed = True
@@ -433,30 +423,13 @@ class LevelRunner:
             ceil(w) + 1,
             ceil(h) + 1
         )
-
-        # choose the most efficient iteration method
-        # if this ever proves insufficient (doubtful), use a more efficient data structure in `Board` (e.g. k-d tree)
-        # TODO: move this logic to `Board.get_cells()` internally
-        if grid_rect.width * grid_rect.height < self.level.board.get_cell_count():
-            grid_pos_iterator = (
-                V2(*grid_rect.topleft) + V2(x, y)
-                for y in range(grid_rect.height)
-                for x in range(grid_rect.width)
-            )
-        else:
-            # when zoomed out, this will almost always be preferred
-            grid_pos_iterator = (
-                pos for pos, _ in self.level.board.get_cells()
-                if grid_rect.collidepoint(*pos)
-            )
         
         grid_line_width = round(DEFAULT_GRID_LINE_WIDTH * self.camera.zoom_level ** 0.5)
-        grid_line_width = min(max(grid_line_width, MIN_GRID_LINE_WIDTH), MAX_GRID_LINE_WIDTH)
+        grid_line_width = clamp(grid_line_width, MIN_GRID_LINE_WIDTH, MAX_GRID_LINE_WIDTH)
         # grid_line_width = 1
 
         # draw board
-        for grid_pos in grid_pos_iterator:
-            cell = self.level.board.get(*grid_pos)
+        for grid_pos, cell in self.level.board.get_cells(grid_rect):
             if not cell: continue
             draw_pos = grid_to_px(grid_pos)
             neighborhood = [
@@ -471,7 +444,6 @@ class LevelRunner:
         for x in range(grid_rect.width):
             x_grid = grid_rect.left + x
             x_px, _ = grid_to_px(V2(x_grid, 0))
-            # x_px -= 1
             pg.draw.line(
                 self.viewport_surf,
                 GRID_LINE_COLOR,
@@ -482,7 +454,6 @@ class LevelRunner:
         for y in range(grid_rect.height):
             y_grid = grid_rect.top + y
             _,  y_px = grid_to_px(V2(0, y_grid))
-            # y_px -= 1
             pg.draw.line(
                 self.viewport_surf,
                 GRID_LINE_COLOR,
@@ -546,7 +517,7 @@ class LevelRunner:
             self.widget_rects.append((rect, w))
             y_pos += h + EDITOR_WIDGET_SPACING
 
-    def select_entity(self, entity: Entity):
+    def select_entity(self, entity):
         self.selected_entity = entity
         self.editor_state = "opening"
         self.viewport_changed = True
