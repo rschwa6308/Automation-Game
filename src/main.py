@@ -7,7 +7,7 @@ from entities import Entity
 from widgets import Widget
 from engine import Level
 from levels import test_level, test_level2
-from helpers import V2, render_text_centered, clamp, wrap_text
+from helpers import V2, draw_aapolygon, render_text_centered, clamp, wrap_text
 
 
 # Display-Related Constants
@@ -31,6 +31,8 @@ EDITOR_ANIMATION_SPEED  = 30    # pixels per frame
 
 PALETTE_ITEM_SIZE       = 64    # pixels
 PALETTE_ITEM_SPACING    = 8     # pixels
+SHELF_ICON_SIZE         = 40    # pixels (play/pause button size)
+SHELF_ICON_SPACING      = 16    # pixels
 EDITOR_WIDGET_SPACING   = 8     # pixels
 
 
@@ -40,6 +42,8 @@ VIEWPORT_BG_COLOR           = (255, 255, 255)
 SHELF_BG_COLOR              = (127, 127, 127, 240)  # mostly opaque
 EDITOR_BG_COLOR             = (127, 127, 127, 240)  # ^^^
 GRID_LINE_COLOR             = (0, 0, 0)
+SHELF_ICON_COLOR_ON         = (0, 0, 0)             # TODO: pick actual colors here (or use actual icons)
+SHELF_ICON_COLOR_OFF        = (200, 200, 200)       # ^^^
 
 DEFAULT_GRID_LINE_WIDTH     = 2
 MIN_GRID_LINE_WIDTH         = 1
@@ -47,7 +51,8 @@ MAX_GRID_LINE_WIDTH         = 5
 
 
 # Misc Constants
-LEVEL_STEP_INTERVAL = 1000 / 5  # milliseconds
+LEVEL_STEP_INTERVAL = 1000  # milliseconds
+FAST_FORWARD_FACTOR = 2
 
 
 class Camera:
@@ -118,6 +123,9 @@ class LevelRunner:
         self.mouse_pos = V2(0, 0)
 
         self.edit_mode = True
+        self.paused = False
+        self.fast_forward = False
+
         self.shelf_state = "open"       # "open", "closed", "opening", or "closing"
         self.editor_state = "closed"    # "open", "closed", "opening", or "closing"
         self.step_progress = 0.0        # float in [0, 1] denoting fraction of current step completed (for animation)
@@ -141,6 +149,7 @@ class LevelRunner:
 
         self.palette_rects: Sequence[Tuple[pg.Rect, Type[Entity]]] = [] # store palette item rects for easier collision
         self.widget_rects: Sequence[Tuple[pg.Rect, Widget]] = []        # store widget rects for easier collision
+        self.shelf_icon_rects: Sequence[Tuple[pg.Rect, str]] = []       # store shelf icon rects for easier collision
 
     def run(self):
         """run the level in a resizable window at `TARGET_FPS`"""
@@ -189,10 +198,11 @@ class LevelRunner:
             self.handle_editor_animation()
 
             # handle level execution
-            if not self.edit_mode:
+            if not self.edit_mode and not self.paused:
                 self.prev_step_elapsed += clock.get_time()
                 # if enough time has elapsed, step the level
-                if self.prev_step_elapsed > LEVEL_STEP_INTERVAL:
+                interval = LEVEL_STEP_INTERVAL // (FAST_FORWARD_FACTOR if self.fast_forward else 1)
+                if self.prev_step_elapsed > interval:
                     self.level.step()
                     self.prev_step_elapsed = 0
                     if self.level.won:
@@ -231,11 +241,9 @@ class LevelRunner:
                 self.screen.blit(self.shelf_surf, (0, self.screen_height - self.shelf_height_onscreen))
                 self.screen.blit(self.editor_surf, (self.screen_width - self.editor_width_onscreen, 0))
                 # draw held entity at cursor
-                if self.held_entity is not None:
-                    s = self.camera.get_cell_size_px()
-                    rect = pg.Rect(*self.mouse_pos, s + 1, s + 1)
-                    rect.move_ip(*(-self.hold_point * s - V2(1, 1)))
-                    self.held_entity.draw_onto(self.screen, rect, self.edit_mode)
+                self.draw_held_entity()
+                # draw play/pause controls
+                self.draw_play_pause()
                 self.reblit_needed = False
                 pg.display.update()
             
@@ -283,24 +291,27 @@ class LevelRunner:
                 self.editor_state = "open"
             self.reblit_needed = True
 
+    def toggle_playing(self):
+        # toggle shelf state (initiates animation (if not already in progress))
+        if self.shelf_state in ("open", "closed"):
+            if self.edit_mode and self.held_entity is None:
+                self.deselect_entity()
+                self.shelf_state = "closing"
+                self.edit_mode = False
+                self.paused = False
+                self.level.save_state()         # freeze current board/palette state
+                self.viewport_changed = True
+            elif not self.edit_mode:
+                self.shelf_state = "opening"
+                self.level.load_saved_state()   # revert board and palette
+                self.edit_mode = True
+                self.viewport_changed = True
+
     def handle_keydown(self, key):
         if key == pg.K_ESCAPE:
             self.running = False
         elif key == pg.K_SPACE:
-            # toggle shelf state (initiates animation (if not already in progress))
-            if self.shelf_state in ("open", "closed"):
-                if self.edit_mode and self.held_entity is None:
-                    self.deselect_entity()
-                    self.shelf_state = "closing"
-                    # self.editor_state = "closing"
-                    self.edit_mode = False
-                    self.level.save_state()         # freeze current board/palette state
-                    self.viewport_changed = True
-                elif not self.edit_mode:
-                    self.shelf_state = "opening"
-                    self.level.load_saved_state()   # revert board and palette
-                    self.edit_mode = True
-                    self.viewport_changed = True
+            self.toggle_playing()
         elif key == pg.K_r:
             # rotate held/selected entity
             e = self.held_entity if self.held_entity else self.selected_entity
@@ -334,8 +345,26 @@ class LevelRunner:
             self.camera.zoom(zoom_direction, pivot)
             self.viewport_changed = True
         
-        # handle entity holding (left click)
-        if button == 1 and self.edit_mode:
+        # left click
+        if button == 1:
+            # handle shelf icons
+            for rect, icon in self.shelf_icon_rects:
+                if rect.collidepoint(*self.mouse_pos):
+                    # print(icon)
+                    if icon == "play":
+                        if self.edit_mode:
+                            self.toggle_playing()
+                        else:
+                            self.paused = not self.paused
+                    elif icon == "stop":
+                        self.toggle_playing()
+                    elif icon == "fast_forward":
+                        self.fast_forward = not self.fast_forward
+                    self.reblit_needed = True
+
+            if not self.edit_mode:
+                return
+            # handle entity holding (left click)
             if self.mouse_pos.y >= self.screen_height - self.shelf_height_onscreen:
                 # cursor is over shelf
                 adjusted_pos = self.mouse_pos - V2(0, self.screen_height - self.shelf_height_onscreen)
@@ -347,6 +376,7 @@ class LevelRunner:
                         self.level.palette.remove(self.held_entity)
                         self.deselect_entity()
                         self.shelf_changed = True
+                        break
             elif self.mouse_pos.x >= self.screen_width - self.editor_width_onscreen:
                 # cursor is over editor
                 adjusted_pos = self.mouse_pos - V2(self.screen_width - self.editor_width_onscreen, 0)
@@ -517,6 +547,14 @@ class LevelRunner:
             self.widget_rects.append((rect, w))
             y_pos += h + EDITOR_WIDGET_SPACING
 
+    def draw_held_entity(self):
+        if self.held_entity is None:
+            return
+        s = self.camera.get_cell_size_px()
+        rect = pg.Rect(*self.mouse_pos, s + 1, s + 1)
+        rect.move_ip(*(-self.hold_point * s - V2(1, 1)))
+        self.held_entity.draw_onto(self.screen, rect, self.edit_mode)
+
     def select_entity(self, entity):
         self.selected_entity = entity
         self.editor_state = "opening"
@@ -528,6 +566,58 @@ class LevelRunner:
         self.editor_state = "closing"
         self.viewport_changed = True
         self.editor_changed = True
+
+    def draw_play_pause(self):
+        # # TEMPORARY
+        # if not self.edit_mode:
+        #     w = SHELF_ICON_SIZE * 3 + SHELF_ICON_SPACING * 4
+        #     bg = pg.Surface((w, SHELF_HEIGHT))
+        #     bg.fill((127, 127, 127))
+        #     bg.set_alpha(240)
+        #     self.screen.blit(bg, (self.screen_width - w, self.screen_height - SHELF_HEIGHT))
+
+        if self.edit_mode:
+            shelf_icons = ["play", None]
+        else:
+            shelf_icons = ["stop", "play", "fast_forward"]
+        
+        self.shelf_icon_rects.clear()
+        for i, icon in enumerate(shelf_icons[::-1]):
+            rect = pg.Rect(
+                self.screen_width - (SHELF_ICON_SIZE + SHELF_ICON_SPACING) * (i + 1),
+                self.screen_height - (SHELF_HEIGHT + SHELF_ICON_SIZE) // 2,
+                SHELF_ICON_SIZE,
+                SHELF_ICON_SIZE
+            )
+            self.shelf_icon_rects.append((rect, icon))
+            # pg.draw.rect(self.screen, (0, 0, 0), rect, width=1)
+            if icon == "play":
+                # color = SHELF_ICON_COLOR_OFF if not self.edit_mode and self.paused else SHELF_ICON_COLOR_ON
+                color = SHELF_ICON_COLOR_OFF if self.edit_mode or self.paused else SHELF_ICON_COLOR_ON
+                draw_aapolygon(self.screen, [
+                    rect.topleft,
+                    rect.bottomleft,
+                    rect.midright
+                ], color)
+            elif icon == "stop":
+                draw_aapolygon(self.screen, [
+                    rect.topleft,
+                    rect.bottomleft,
+                    rect.bottomright,
+                    rect.topright
+                ], SHELF_ICON_COLOR_OFF)
+            elif icon == "fast_forward":
+                color = SHELF_ICON_COLOR_ON if self.fast_forward else SHELF_ICON_COLOR_OFF
+                draw_aapolygon(self.screen, [
+                    rect.topleft,
+                    rect.bottomleft,
+                    (rect.right - rect.width // 2.5, rect.centery)
+                ], color)
+                draw_aapolygon(self.screen, [
+                    (rect.left + rect.width // 2.5, rect.top),
+                    (rect.left + rect.width // 2.5, rect.bottom),
+                    (rect.right, rect.centery)
+                ], color)
 
 if __name__ == "__main__":
     LevelRunner(test_level2).run()

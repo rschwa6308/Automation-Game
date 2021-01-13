@@ -127,6 +127,12 @@ def draw_aacircle(surf, x, y, r, color):
     pg.gfxdraw.aacircle(surf, x, y, r, color)
     pg.gfxdraw.filled_circle(surf, x, y, r, color)
 
+
+def draw_aapolygon(surf, points, color):
+    pg.gfxdraw.aapolygon(surf, points, color)
+    pg.gfxdraw.filled_polygon(surf, points, color)
+
+
 def draw_rectangle(surf, rect, color, thickness=1):
     """draws a rectangle with given draw thickness"""
     # thickness += 1
