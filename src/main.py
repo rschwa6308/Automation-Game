@@ -52,7 +52,7 @@ MAX_GRID_LINE_WIDTH         = 5
 
 # Misc Constants
 LEVEL_STEP_INTERVAL = 1000  # milliseconds
-FAST_FORWARD_FACTOR = 2
+FAST_FORWARD_FACTOR = 3
 
 
 class Camera:
@@ -128,7 +128,7 @@ class LevelRunner:
 
         self.shelf_state = "open"       # "open", "closed", "opening", or "closing"
         self.editor_state = "closed"    # "open", "closed", "opening", or "closing"
-        self.step_progress = 0.0        # float in [0, 1] denoting fraction of current step completed (for animation)
+        self.step_progress = 0.0        # float in [0, 1) denoting fraction of current step completed (for animation)
 
         # initialize camera to contain `level.board` (with some margin)
         rect = level.board.get_bounding_rect(margin=3)   # arbitrary value
@@ -160,8 +160,6 @@ class LevelRunner:
         self.draw_level()
         self.draw_shelf()
         self.draw_editor()
-
-        self.prev_step_elapsed = 0
 
         # mainloop
         clock = pg.time.Clock()
@@ -199,19 +197,16 @@ class LevelRunner:
 
             # handle level execution
             if not self.edit_mode and not self.paused:
-                self.prev_step_elapsed += clock.get_time()
-                # if enough time has elapsed, step the level
-                interval = LEVEL_STEP_INTERVAL // (FAST_FORWARD_FACTOR if self.fast_forward else 1)
-                if self.prev_step_elapsed > interval:
+                interval = LEVEL_STEP_INTERVAL / (FAST_FORWARD_FACTOR if self.fast_forward else 1)
+                self.step_progress += clock.get_time() / interval
+                if self.step_progress >= 1.0:
+                    self.step_progress -= 1.0
                     self.level.step()
-                    self.prev_step_elapsed = 0
                     if self.level.won:
                         print("good job")
                         # TODO: show congrats screen or something
-                # update step progress
-                self.step_progress = self.prev_step_elapsed / LEVEL_STEP_INTERVAL
                 self.viewport_changed = True
-            
+
             # handle output
             if self.window_size_changed:
                 # trigger total re-draw
@@ -306,6 +301,7 @@ class LevelRunner:
                 self.level.load_saved_state()   # revert board and palette
                 self.edit_mode = True
                 self.viewport_changed = True
+        self.step_progress = 0.5    # wait half a tick before first step
 
     def handle_keydown(self, key):
         if key == pg.K_ESCAPE:
