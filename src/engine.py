@@ -9,23 +9,32 @@ from helpers import V2
 
 
 class Board:
-    """a hashing based sparse-matrix representation of an infinite 2D game board; uses inverted y-axis convention"""
+    """a hashing based sparse-matrix representation of an infinite 2D game board"""
     board_type = Mapping[Tuple[int, int], Collection[Entity]]
 
     def __init__(self, cells: board_type = {}):
         if not all(all(isinstance(e, Entity) for e in cell) for cell in cells.values()):
             raise ValueError("Invalid board contents; cells can only contain `Entity`s")
-        
+
         cells = {k: v for k, v in cells.items() if v}   # eliminate empty cells
         self.cells = cells
-    
+
+        # storing type locations allows for faster retrieval in most scenarios
+        self.type_locs: Mapping[Type[Entity], Collection[Tuple[Tuple[int, int], Entity]]] = {
+            t: set() for t in ENTITY_TYPES
+        }
+        for k, v in cells.items():
+            for e in v:
+                t = type(e)
+                self.type_locs[t].add((k, e))
+
     def get(self, x, y):
         """returns a tuple containing all entities at the specified location"""
         if (x, y) in self.cells:
             return tuple(self.cells[(x, y)])   # return an immutable type
         else:
             return tuple()
-    
+
     def get_cells(self, window: pg.Rect = None):
         """returns a generator containing all non-empty cells (along with positions) contained within `window`"""
         if window is None:
@@ -50,23 +59,28 @@ class Board:
                 for pos, cell in self.cells.items():
                     if window.collidepoint(*pos):
                         yield V2(*pos), cell
-    
+
     def get_cell_count(self):
         """returns the number of non-empty cells"""
         return len(self.cells)
 
-    def get_all(self, filter_type: Type[Entity] = Entity):
+    def get_all(self, filter_type: Type[Entity] = None):
         """returns a generator containing all present entities (with positions)"""
-        for pos, cell in self.cells.items():
-            for e in cell:
-                if isinstance(e, filter_type):
+        if filter_type is None:
+            for pos, cell in self.cells.items():
+                for e in cell:
                     yield V2(*pos), e
+        else:
+            for pos, e in self.type_locs[filter_type]:
+                yield V2(*pos), e
 
     def insert(self, x, y, *entities):
         pos = (x, y)
         if pos not in self.cells:
             self.cells[pos] = []
         self.cells[pos].extend(entities)
+        for e in entities:
+            self.type_locs[type(e)].add((pos, e))
     
     def remove(self, x, y, *entities):
         pos = (x, y)
@@ -75,6 +89,7 @@ class Board:
         
         for e in entities:
             self.cells[pos].remove(e)
+            self.type_locs[type(e)].remove((pos, e))
     
     def get_bounding_rect(self, margin: int = 0) -> pg.Rect:
         """returns the minimal rect completely containing all non-empty cells (with the given margin)"""
@@ -198,7 +213,7 @@ class Level:
                         break
 
     def apply_translations(self):
-        for pos, e in list(self.board.get_all()):       # list() avoids concurrent modification
+        for pos, e in list(self.board.get_all(filter_type=Barrel)):       # list() avoids concurrent modification
             if e.moves:
                 dest = pos + e.velocity
                 if self.is_walkable(dest):

@@ -6,8 +6,8 @@ import pygame as pg
 from entities import Entity
 from widgets import Widget
 from engine import Level
-from levels import test_level, test_level2
-from helpers import V2, draw_aapolygon, render_text_centered, clamp, wrap_text
+from levels import test_level, test_level2, resource_test
+from helpers import V2, draw_aapolygon, draw_rect_alpha, render_text_centered, clamp, wrap_text
 
 
 # Display-Related Constants
@@ -21,29 +21,29 @@ TARGET_FPS              = 60
 
 
 # Layout-Related Constants
-DEFAULT_CELL_SIZE       = 64    # pixels
+DEFAULT_CELL_SIZE       = 64
 
-SHELF_HEIGHT            = 100   # pixels
-EDITOR_WIDTH            = 200   # pixels
+SHELF_HEIGHT            = 100
+EDITOR_WIDTH            = 200
 
-SHELF_ANIMATION_SPEED   = 15    # pixels per frame
-EDITOR_ANIMATION_SPEED  = 30    # pixels per frame
-
-PALETTE_ITEM_SIZE       = 64    # pixels
-PALETTE_ITEM_SPACING    = 8     # pixels
-SHELF_ICON_SIZE         = 40    # pixels (play/pause button size)
-SHELF_ICON_SPACING      = 16    # pixels
-EDITOR_WIDGET_SPACING   = 8     # pixels
-
+PALETTE_ITEM_SIZE       = 64
+PALETTE_ITEM_SPACING    = 8 
+SHELF_ICON_SIZE         = 48    # (play/pause button size)
+SHELF_ICON_SPACING      = 16
+SHELF_ICON_PADDING      = 25
+EDITOR_WIDGET_SPACING   = 8 
 
 
 # Aesthetics-Related Constants
 VIEWPORT_BG_COLOR           = (255, 255, 255)
 SHELF_BG_COLOR              = (127, 127, 127, 240)  # mostly opaque
-EDITOR_BG_COLOR             = (127, 127, 127, 240)  # ^^^
+EDITOR_BG_COLOR             = (127, 127, 127, 240)  # mostly opaque
 GRID_LINE_COLOR             = (0, 0, 0)
-SHELF_ICON_COLOR_ON         = (0, 0, 0)             # TODO: pick actual colors here (or use actual icons)
-SHELF_ICON_COLOR_OFF        = (200, 200, 200)       # ^^^
+SHELF_ICON_BG_COLOR         = (127, 127, 127, 191)  # 3/4 opaque
+SHELF_ICON_BG_COLOR_PRESSED = (150, 150, 150, 191)  # 3/4 opaque
+SHELF_ICON_COLOR            = (0, 0, 0)
+SHELF_ICON_COLOR_PRESSED    = (64, 64, 64)
+SHELF_ICON_COLOR_OFF        = (110, 110, 110)
 
 DEFAULT_GRID_LINE_WIDTH     = 2
 MIN_GRID_LINE_WIDTH         = 1
@@ -51,6 +51,9 @@ MAX_GRID_LINE_WIDTH         = 5
 
 
 # Misc Constants
+SHELF_ANIMATION_SPEED   = 15    # pixels per frame
+EDITOR_ANIMATION_SPEED  = 30    # pixels per frame
+
 LEVEL_STEP_INTERVAL = 1000  # milliseconds
 FAST_FORWARD_FACTOR = 3
 
@@ -147,9 +150,11 @@ class LevelRunner:
 
         self.selected_entity: Union[Entity, None] = None
 
-        self.palette_rects: Sequence[Tuple[pg.Rect, Type[Entity]]] = [] # store palette item rects for easier collision
-        self.widget_rects: Sequence[Tuple[pg.Rect, Widget]] = []        # store widget rects for easier collision
-        self.shelf_icon_rects: Sequence[Tuple[pg.Rect, str]] = []       # store shelf icon rects for easier collision
+        self.pressed_icon: str = None
+
+        self.palette_rects: Sequence[Tuple[pg.Rect, Type[Entity]]]  = []    # store palette item rects for easier collision
+        self.widget_rects: Sequence[Tuple[pg.Rect, Widget]]         = []    # store widget rects for easier collision
+        self.shelf_icon_rects: Sequence[Tuple[pg.Rect, str]]        = []    # store shelf icon rects for easier collision
 
     def run(self):
         """run the level in a resizable window at `TARGET_FPS`"""
@@ -238,15 +243,15 @@ class LevelRunner:
                 # draw held entity at cursor
                 self.draw_held_entity()
                 # draw play/pause controls
-                self.draw_play_pause()
+                self.draw_shelf_icons()
                 self.reblit_needed = False
-                pg.display.update()
+                # pg.display.update()
             
             # TEMPORARY
-            # fps = round(clock.get_fps())
-            # pg.draw.rect(self.screen, (0, 0, 0), pg.Rect(0, 0, 30, 30))
-            # render_text_centered(str(fps), (255, 255, 255), self.screen, (15, 15), 25)
-            # pg.display.update()
+            fps = round(clock.get_fps())
+            pg.draw.rect(self.screen, (0, 0, 0), pg.Rect(0, 0, 30, 30))
+            render_text_centered(str(fps), (255, 255, 255), self.screen, (15, 15), 25)
+            pg.display.update()
                 
     def handle_window_resize(self, new_width, new_height):
         self.screen_width = max(new_width, MIN_SCREEN_WIDTH)
@@ -346,16 +351,7 @@ class LevelRunner:
             # handle shelf icons
             for rect, icon in self.shelf_icon_rects:
                 if rect.collidepoint(*self.mouse_pos):
-                    # print(icon)
-                    if icon == "play":
-                        if self.edit_mode:
-                            self.toggle_playing()
-                        else:
-                            self.paused = not self.paused
-                    elif icon == "stop":
-                        self.toggle_playing()
-                    elif icon == "fast_forward":
-                        self.fast_forward = not self.fast_forward
+                    self.pressed_icon = icon
                     self.reblit_needed = True
 
             if not self.edit_mode:
@@ -389,35 +385,51 @@ class LevelRunner:
                 cell = self.level.board.get(*pos)
                 if cell:
                     e = cell[-1]    # select last element; TODO: figure out if this is a problem lol
+                    # deselect current selection if clicking on something else
+                    if self.selected_entity is not e:
+                        self.deselect_entity()
                     if not e.locked:
                         # pick up entity (from board)
                         self.held_entity = e
                         self.hold_point = pos_float.fmod(1)
                         self.level.board.remove(*pos, self.held_entity)
-                        # deselect current selection if picking up something else
-                        if self.selected_entity is not self.held_entity:
-                            self.deselect_entity()
                         self.viewport_changed = True
                 else:
                     self.deselect_entity()
    
     def handle_mousebuttonup(self, button):
-        # handle entity holding (left click)
-        if button == 1 and self.held_entity is not None:
-            if self.mouse_pos.y >= self.screen_height - self.shelf_height_onscreen:
-                # cursor is over shelf
-                self.level.palette.add(self.held_entity)
-                self.shelf_changed = True
-                self.held_entity = None
-                self.deselect_entity()
-            else:
-                # cursor is over board
-                pos = (self.camera.get_world_coords(self.mouse_pos, self.screen_width, self.screen_height)).floor()
-                # drop entity
-                self.level.board.insert(*pos, self.held_entity)
-                # select entity that was just dropped
-                self.select_entity(self.held_entity)
-                self.held_entity = None
+        # left click
+        if button == 1:
+            # handle shelf icons
+            if self.pressed_icon is not None:
+                if self.pressed_icon == "play/pause":
+                    if self.edit_mode:
+                        self.toggle_playing()
+                    else:
+                        self.paused = not self.paused
+                elif self.pressed_icon == "stop":
+                    self.toggle_playing()
+                elif self.pressed_icon == "fast_forward":
+                    self.fast_forward = not self.fast_forward
+                self.pressed_icon = None
+                self.reblit_needed = True
+            
+            # handle entity holding
+            if self.held_entity is not None:
+                if self.mouse_pos.y >= self.screen_height - self.shelf_height_onscreen:
+                    # cursor is over shelf
+                    self.level.palette.add(self.held_entity)
+                    self.shelf_changed = True
+                    self.held_entity = None
+                    self.deselect_entity()
+                else:
+                    # cursor is over board
+                    pos = (self.camera.get_world_coords(self.mouse_pos, self.screen_width, self.screen_height)).floor()
+                    # drop entity
+                    self.level.board.insert(*pos, self.held_entity)
+                    # select entity that was just dropped
+                    self.select_entity(self.held_entity)
+                    self.held_entity = None
 
     def handle_mousemotion(self, rel):
         # pan camera if right click is held
@@ -507,10 +519,10 @@ class LevelRunner:
             self.palette_rects.append((rect, e_type))
             if count > 0:   # only draw item if there are any left (maintains spacing)
                 temp_entity = e_type()
-                temp_entity.draw_onto(self.shelf_surf, rect, edit_mode=True)
+                temp_entity.draw_onto_base(self.shelf_surf, rect, edit_mode=True)
                 # pg.draw.rect(self.shelf_surf, (0, 255, 0), rect)
                 pg.draw.circle(self.shelf_surf, (255, 0, 0), rect.topright, 14)
-                render_text_centered(str(count), (255, 255, 255), self.shelf_surf, rect.topright, 22, bold=True)
+                render_text_centered(str(count), (255, 255, 255), self.shelf_surf, rect.topright, 20, bold=True)
 
     def draw_editor(self):
         self.editor_surf.fill(EDITOR_BG_COLOR)
@@ -549,7 +561,7 @@ class LevelRunner:
         s = self.camera.get_cell_size_px()
         rect = pg.Rect(*self.mouse_pos, s + 1, s + 1)
         rect.move_ip(*(-self.hold_point * s - V2(1, 1)))
-        self.held_entity.draw_onto(self.screen, rect, self.edit_mode)
+        self.held_entity.draw_onto(self.screen, rect, self.edit_mode)   # pass in True here to show selection highlight
 
     def select_entity(self, entity):
         self.selected_entity = entity
@@ -563,19 +575,11 @@ class LevelRunner:
         self.viewport_changed = True
         self.editor_changed = True
 
-    def draw_play_pause(self):
-        # # TEMPORARY
-        # if not self.edit_mode:
-        #     w = SHELF_ICON_SIZE * 3 + SHELF_ICON_SPACING * 4
-        #     bg = pg.Surface((w, SHELF_HEIGHT))
-        #     bg.fill((127, 127, 127))
-        #     bg.set_alpha(240)
-        #     self.screen.blit(bg, (self.screen_width - w, self.screen_height - SHELF_HEIGHT))
-
+    def draw_shelf_icons(self):
         if self.edit_mode:
-            shelf_icons = ["play", None]
+            shelf_icons = ["play/pause", None]
         else:
-            shelf_icons = ["stop", "play", "fast_forward"]
+            shelf_icons = ["stop", "play/pause", "fast_forward"]
         
         self.shelf_icon_rects.clear()
         for i, icon in enumerate(shelf_icons[::-1]):
@@ -585,35 +589,60 @@ class LevelRunner:
                 SHELF_ICON_SIZE,
                 SHELF_ICON_SIZE
             )
-            self.shelf_icon_rects.append((rect, icon))
-            # pg.draw.rect(self.screen, (0, 0, 0), rect, width=1)
-            if icon == "play":
-                # color = SHELF_ICON_COLOR_OFF if not self.edit_mode and self.paused else SHELF_ICON_COLOR_ON
-                color = SHELF_ICON_COLOR_OFF if self.edit_mode or self.paused else SHELF_ICON_COLOR_ON
-                draw_aapolygon(self.screen, [
-                    rect.topleft,
-                    rect.bottomleft,
-                    rect.midright
-                ], color)
+            self.shelf_icon_rects.append((rect.copy(), icon))
+
+            color = SHELF_ICON_COLOR_PRESSED if icon == self.pressed_icon else SHELF_ICON_COLOR
+            bg_color = SHELF_ICON_BG_COLOR_PRESSED if icon == self.pressed_icon else SHELF_ICON_BG_COLOR
+            # # prevent double opacity when shelf is open
+            # if self.shelf_state == "open":
+            #     bg_color = (*bg_color[:3], 0)
+
+            if icon is not None:
+                # draw gray background
+                draw_rect_alpha(self.screen, bg_color, rect, width=0, border_radius=16)
+                pg.draw.rect(self.screen, color, rect, width=4, border_radius=16)
+            
+            rect.inflate_ip(-SHELF_ICON_PADDING, -SHELF_ICON_PADDING)
+            if icon == "play/pause":
+                if self.paused or self.edit_mode:
+                    draw_aapolygon(self.screen, [
+                        rect.topleft,
+                        rect.bottomleft,
+                        rect.midright
+                    ], color)
+                else:
+                    w = round(rect.width // 3)
+                    draw_aapolygon(self.screen, [
+                        rect.topleft,
+                        rect.bottomleft,
+                        (rect.left + w, rect.bottom),
+                        (rect.left + w, rect.top)
+                    ], color)
+                    draw_aapolygon(self.screen, [
+                        rect.topright,
+                        rect.bottomright,
+                        (rect.right - w, rect.bottom),
+                        (rect.right - w, rect.top)
+                    ], color)
             elif icon == "stop":
                 draw_aapolygon(self.screen, [
                     rect.topleft,
                     rect.bottomleft,
                     rect.bottomright,
                     rect.topright
-                ], SHELF_ICON_COLOR_OFF)
+                ], color)
             elif icon == "fast_forward":
-                color = SHELF_ICON_COLOR_ON if self.fast_forward else SHELF_ICON_COLOR_OFF
+                color = color if self.fast_forward else SHELF_ICON_COLOR_OFF
                 draw_aapolygon(self.screen, [
                     rect.topleft,
                     rect.bottomleft,
-                    (rect.right - rect.width // 2.5, rect.centery)
+                    (rect.right - rect.width // 2.2, rect.centery)
                 ], color)
                 draw_aapolygon(self.screen, [
-                    (rect.left + rect.width // 2.5, rect.top),
-                    (rect.left + rect.width // 2.5, rect.bottom),
+                    (rect.left + rect.width // 2.2, rect.top),
+                    (rect.left + rect.width // 2.2, rect.bottom),
                     (rect.right, rect.centery)
                 ], color)
 
 if __name__ == "__main__":
-    LevelRunner(test_level2).run()
+    LevelRunner(resource_test).run()

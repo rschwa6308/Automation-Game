@@ -92,7 +92,7 @@ class SmallIntEditor(AttrEditor):
         self.hitboxes.clear()
         for i, n in enumerate(range(self.limits[0], self.limits[1] + 1)):   # inclusive
             box = pg.Rect(
-                rect.left + rect.width * 0.4 + (box_width - box_thickness) * i,
+                rect.left + rect.width * 0.4 + (box_width - box_thickness // 2) * i,
                 rect.centery - box_height / 2,
                 box_width, 
                 box_height

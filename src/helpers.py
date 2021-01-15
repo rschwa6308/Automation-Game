@@ -69,12 +69,16 @@ class Direction(V2, Enum):
     SOUTH = (0, 1)
     WEST = (-1, 0)
 
+    @staticmethod
+    def nonzero():
+        return [Direction.NORTH, Direction.EAST, Direction.SOUTH, Direction.WEST]
+
     def rot90(self, n: int):
         """return the `Direction` that results from rotating 90 degrees clockwise `n` times (can be negative)"""
         if self is Direction.NONE:
             return Direction.NONE
         
-        l = list(Direction)[1:]
+        l = Direction.nonzero()
         return l[(l.index(self) + n) % 4]
         
 
@@ -136,10 +140,19 @@ def draw_aapolygon(surf, points, color):
 def draw_rectangle(surf, rect, color, thickness=1):
     """draws a rectangle with given draw thickness"""
     # thickness += 1
+    a = 1 - thickness % 2   # adjustment
     pg.draw.rect(surf, color, pg.Rect(rect.left, rect.top, rect.width, thickness))
-    pg.draw.rect(surf, color, pg.Rect(rect.left, rect.bottom - thickness, rect.width, thickness))
+    pg.draw.rect(surf, color, pg.Rect(rect.left, rect.bottom - thickness + 1, rect.width + a, thickness))   # `+ a` fills in bottom right pixel
     pg.draw.rect(surf, color, pg.Rect(rect.left, rect.top, thickness, rect.height))
-    pg.draw.rect(surf, color, pg.Rect(rect.right - thickness, rect.top, thickness, rect.height))
+    pg.draw.rect(surf, color, pg.Rect(rect.right - thickness + 1, rect.top, thickness, rect.height))
+
+def draw_rect_alpha(surface, color, rect, width=0, border_radius=0):
+    assert(len(color) == 4)
+    shape_surf = pg.Surface(rect.size)
+    shape_surf.set_colorkey((0, 0, 0))
+    shape_surf.set_alpha(color[-1])
+    pg.draw.rect(shape_surf, color[:3], shape_surf.get_rect(), width=width, border_radius=border_radius)
+    surface.blit(shape_surf, rect.topleft)
 # --------------- #
 
 
