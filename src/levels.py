@@ -27,7 +27,8 @@ test_board2 = Board({
         (-3, 0): [ResourceTile(a), ResourceExtractor(Direction.EAST)],
         (3, 0): [ResourceTile(b), ResourceExtractor(Direction.WEST)],
         (0, 0): [Boostpad(Direction.NORTH)],
-        (0, -8): [Target(a + b, 100)]
+        (0, -8): [Target(a + b, 100)],
+        (5, -5): [Piston()]
     })
 
 test_level2 = Level(test_board2, Palette())

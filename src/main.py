@@ -42,7 +42,7 @@ GRID_LINE_COLOR             = (0, 0, 0)
 SHELF_ICON_BG_COLOR         = (127, 127, 127, 191)  # 3/4 opaque
 SHELF_ICON_BG_COLOR_PRESSED = (150, 150, 150, 191)  # 3/4 opaque
 SHELF_ICON_COLOR            = (0, 0, 0)
-SHELF_ICON_COLOR_PRESSED    = (64, 64, 64)
+SHELF_ICON_COLOR_PRESSED    = (63, 63, 63)
 SHELF_ICON_COLOR_OFF        = (110, 110, 110)
 
 DEFAULT_GRID_LINE_WIDTH     = 2
@@ -206,9 +206,11 @@ class LevelRunner:
                 self.step_progress += clock.get_time() / interval
                 if self.step_progress >= 1.0:
                     self.step_progress -= 1.0
+                    # TODO: two stages of execution
                     self.level.step()
                     if self.level.won:
-                        print("good job")
+                        pass
+                        # print("good job")
                         # TODO: show congrats screen or something
                 self.viewport_changed = True
 
@@ -306,7 +308,7 @@ class LevelRunner:
                 self.level.load_saved_state()   # revert board and palette
                 self.edit_mode = True
                 self.viewport_changed = True
-        self.step_progress = 0.5    # wait half a tick before first step
+        self.step_progress = 0.0
 
     def handle_keydown(self, key):
         if key == pg.K_ESCAPE:
@@ -443,7 +445,8 @@ class LevelRunner:
 
     def draw_level(self):
         """draw the level onto `viewport_surf` using `self.step_progress` for animation state"""
-        # TODO: draw grid first (???)
+        # TODO: draw carpets, then grid, then blocks
+        # z_pos:     < 0          = 0        > 0
         self.viewport_surf.fill(VIEWPORT_BG_COLOR)
 
         s = self.camera.get_cell_size_px()
@@ -591,11 +594,18 @@ class LevelRunner:
             )
             self.shelf_icon_rects.append((rect.copy(), icon))
 
-            color = SHELF_ICON_COLOR_PRESSED if icon == self.pressed_icon else SHELF_ICON_COLOR
-            bg_color = SHELF_ICON_BG_COLOR_PRESSED if icon == self.pressed_icon else SHELF_ICON_BG_COLOR
-            # # prevent double opacity when shelf is open
-            # if self.shelf_state == "open":
-            #     bg_color = (*bg_color[:3], 0)
+            # determine foreground and background draw colors
+            color = SHELF_ICON_COLOR
+            bg_color = SHELF_ICON_BG_COLOR
+            if icon == "fast_forward" and not self.fast_forward:
+                color = SHELF_ICON_COLOR_OFF
+            if icon == self.pressed_icon:
+                color = SHELF_ICON_COLOR_PRESSED
+                bg_color = SHELF_ICON_BG_COLOR_PRESSED
+            
+            # prevent double opacity when shelf is open
+            if self.shelf_state == "open":
+                bg_color = (*bg_color[:3], 0)
 
             if icon is not None:
                 # draw gray background
@@ -632,7 +642,6 @@ class LevelRunner:
                     rect.topright
                 ], color)
             elif icon == "fast_forward":
-                color = color if self.fast_forward else SHELF_ICON_COLOR_OFF
                 draw_aapolygon(self.screen, [
                     rect.topleft,
                     rect.bottomleft,
@@ -645,4 +654,4 @@ class LevelRunner:
                 ], color)
 
 if __name__ == "__main__":
-    LevelRunner(resource_test).run()
+    LevelRunner(test_level2).run()

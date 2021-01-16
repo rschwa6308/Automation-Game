@@ -99,10 +99,6 @@ class Barrier(Block):
     def draw_onto_base(self, surf: pg.Surface, rect: pg.Rect, edit_mode: bool, step_progress: float = 0.0, neighborhood = (([],) * 5,) * 5):
         pg.draw.rect(surf, (50, 50, 50), rect)
 
-        s = rect.width
-        # if selected:
-        #     draw_rectangle(surf, rect, HIGHLIGHT_COLOR, thickness=s*HIGHLIGHT_THICKNESS_MULT)
-
 
 class Barrel(Block):
     name = "Barrel"
@@ -174,9 +170,6 @@ class Barrel(Block):
                 round(s ** 0.5 * 0.4),
                 angle=120
             )
-        
-        # if selected:
-        #     draw_rectangle(surf, rect, HIGHLIGHT_COLOR, thickness=s*HIGHLIGHT_THICKNESS_MULT)
 
 
 class ResourceTile(Carpet):
@@ -203,10 +196,6 @@ class ResourceTile(Carpet):
             border_bottom_right_radius=-1 if bottom or right else r,
             border_bottom_left_radius=-1 if bottom or left else r,
         )
-
-        s = rect.width
-        # if selected:
-        #     draw_rectangle(surf, rect, HIGHLIGHT_COLOR, thickness=s*HIGHLIGHT_THICKNESS_MULT)
 
 
 class ResourceExtractor(Block):
@@ -244,9 +233,6 @@ class ResourceExtractor(Block):
             angle=108
         )
 
-        # if selected:
-        #     draw_rectangle(surf, rect, HIGHLIGHT_COLOR, thickness=s*HIGHLIGHT_THICKNESS_MULT)
-
 
 class Boostpad(Carpet):
     name = "Boostpad"
@@ -276,9 +262,6 @@ class Boostpad(Carpet):
                 s // 3,
                 round(s * 0.05)
             )
-        
-        # if selected:
-        #     draw_rectangle(surf, rect, HIGHLIGHT_COLOR, thickness=s*HIGHLIGHT_THICKNESS_MULT)
 
 
 class Target(Carpet):
@@ -305,7 +288,68 @@ class Target(Carpet):
             s - padding * 1.75,
         )
 
-        # if selected:
-        #     draw_rectangle(surf, rect, HIGHLIGHT_COLOR, thickness=s*HIGHLIGHT_THICKNESS_MULT)
 
-ENTITY_TYPES = [Barrel, Barrier, Boostpad, ResourceExtractor, ResourceTile, Target]
+
+class Piston(Block):
+    name = "Piston"
+    ascii_str = "P"
+    orients = True
+
+    # boostpads are unlocked by default
+    def __init__(self, orientation: Direction = Direction.NORTH, locked: bool = False):
+        super().__init__(locked)
+        if (orientation is Direction.NONE):
+            raise ValueError("Boostpad orientation cannot be `Direction.NONE`")
+        self.orientation = orientation
+        self.activated = True   # FOR TESTING
+    
+    def get_widgets(self) -> Sequence[Widget]:
+        return [
+            DirectionEditor(self, "orientation")
+        ]
+    
+    def draw_onto_base(self, surf: pg.Surface, rect: pg.Rect, edit_mode: bool, step_progress: float, neighborhood):
+        s = rect.width
+        max_extension = s * 0.75
+        extension = round(max_extension * (1 - abs(2*step_progress - 1))) if self.activated else 0
+
+        padding = round(s * 0.1)
+        temp = pg.Surface(rect.inflate(s * 2, s * 2).size, pg.SRCALPHA)
+        temp_rect = temp.get_rect()
+        temp.fill((0, 0, 0, 0))
+        head_top = temp_rect.centery - s // 2 + padding - extension
+        # draw stem
+        pg.draw.rect(temp, (127, 127, 127), pg.Rect(
+            temp_rect.centerx - s * 0.1,
+            head_top,
+            s * 0.2,
+            s - padding * 3 + extension
+        ))
+        # draw head
+        pg.draw.rect(
+            temp, (139, 69, 19),
+            pg.Rect(
+                temp_rect.centerx - s // 2 + padding,
+                head_top,
+                s - padding * 2,
+                s * 0.25
+            ),
+            border_radius=round(s * 0.08)
+        )
+        # draw base
+        pg.draw.rect(temp, (0, 0, 0), pg.Rect(
+            temp_rect.centerx - s // 2 + padding,
+            temp_rect.centery - padding,
+            s - padding * 2,
+            s * 0.5
+        ))
+
+        # rotate and blit to correct position
+        temp = pg.transform.rotate(temp, -90 * Direction.nonzero().index(self.orientation))
+        surf.blit(temp, rect.inflate(s * 2, s * 2))
+
+
+
+
+
+ENTITY_TYPES = [Barrel, Barrier, Boostpad, ResourceExtractor, ResourceTile, Target, Piston]
