@@ -54,7 +54,7 @@ MAX_GRID_LINE_WIDTH         = 5
 SHELF_ANIMATION_SPEED   = 15    # pixels per frame
 EDITOR_ANIMATION_SPEED  = 30    # pixels per frame
 
-LEVEL_STEP_INTERVAL = 1000  # milliseconds
+LEVEL_STEP_INTERVAL = 2000  # milliseconds
 FAST_FORWARD_FACTOR = 3
 
 
@@ -206,7 +206,7 @@ class LevelRunner:
                 self.step_progress += clock.get_time() / interval
                 if self.step_progress >= 1.0:
                     self.step_progress -= 1.0
-                    # TODO: two stages of execution
+                    # TODO: overhaul this system so that execution is always one step ahead of drawing
                     self.level.step()
                     if self.level.won:
                         pass
@@ -302,6 +302,7 @@ class LevelRunner:
                 self.edit_mode = False
                 self.paused = False
                 self.level.save_state()         # freeze current board/palette state
+                # self.level.step()               # step once
                 self.viewport_changed = True
             elif not self.edit_mode:
                 self.shelf_state = "opening"

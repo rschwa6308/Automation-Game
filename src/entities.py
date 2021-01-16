@@ -113,6 +113,7 @@ class Barrel(Block):
         super().__init__(locked)
         self.color = color
         self.velocity = velocity
+        self.shift: Direction = Direction.NONE  # represents a linear shift (e.g. from a piston)
         self.leaky = False
         self.draw_center = V2(0, 0)
 
@@ -132,14 +133,29 @@ class Barrel(Block):
 
     def draw_onto_base(self, surf: pg.Surface, rect: pg.Rect, edit_mode: bool, step_progress: float = 0.0, neighborhood = (([],) * 5,) * 5):
         s = rect.width
-        # travel = step_progress                          # continuous constant motion
-        # travel = min(1.0, step_progress * 2)            # travel full distance during first half of step
-        # travel = max(0.0, (step_progress - 0.5) * 2)    # travel full distance during second half of step
-        travel = self.travel_curve(step_progress)
-        # print(travel)
-        self.draw_center = V2(*rect.center) + self.velocity * (rect.width - 1) * travel
-        draw_radius = s * 0.3
+        self.draw_center = V2(*rect.center)
+        # travel phase (`velocity`)
+        if step_progress < 0.5:
+            amt = 0
+        else:
+            amt = 2 * (step_progress - 0.5)
+        travel = self.travel_curve(amt)   
+        self.draw_center += self.velocity * (s - 1) * travel
+        # `shift` phase
+        if self.shift is not Direction.NONE:
+            # linear travel from [0.11, 0.11 + 1/16] at speed 8, normal travel from (0.11 + 1/16, 0.5]
+            # makes it look like barrel is being pushed and slides to a halt
+            a = 0.037   # fine tune 'collision' with piston head
+            b = a + 1/16
+            if step_progress <= a:
+                amt = 0
+            elif step_progress <= b:
+                amt = 8 * (step_progress - a)
+            else:
+                amt = self.travel_curve(0.25 + 2 * (step_progress - b))
+            self.draw_center += self.shift * (s - 1) * amt
 
+        draw_radius = s * 0.3
         draw_color_rgb = self.color.rgb()
 
         # check for intersection with other barrel
@@ -310,8 +326,18 @@ class Piston(Block):
     
     def draw_onto_base(self, surf: pg.Surface, rect: pg.Rect, edit_mode: bool, step_progress: float, neighborhood):
         s = rect.width
-        max_extension = s * 0.75
-        extension = round(max_extension * (1 - abs(2*step_progress - 1))) if self.activated else 0
+        max_amt = 0.75
+        # extend head at speed 8, then retract head at speed 8
+        t = max_amt / 8
+        if step_progress <= t:
+            amt = 8 * step_progress
+        elif step_progress <= 2*t:
+            amt = max_amt - 8 * (step_progress - t)
+        else:
+            amt = 0
+        
+        extension = round(s * amt)
+        # extension = round(max_extension * (1 - abs(2*amt - 1))) if self.activated else 0
 
         padding = round(s * 0.1)
         temp = pg.Surface(rect.inflate(s * 2, s * 2).size, pg.SRCALPHA)

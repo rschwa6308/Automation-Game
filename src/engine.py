@@ -181,24 +181,21 @@ class Level:
     
     def step(self):
         """step the level one time unit"""
-        # apply translations
-        self.apply_translations()
-
-        # apply resource extractors
-        self.apply_resource_extractors()
-
-        # apply merges
+        # TODO: overhaul so that execution is always one step ahead of drawing
+        self.apply_shifts()
         self.apply_merges()
 
-        # apply sensors & pistons
+        self.apply_translations()
+        self.apply_merges()
 
-        # apply rotations
+        self.apply_resource_extractors()
+
+        self.apply_pistons()    # TODO: wiring stuff here
+
         self.apply_rotations()
 
-        # apply targets
         self.apply_targets()
 
-        # check for win
         self.check_won()
         
         self.step_count += 1
@@ -211,6 +208,16 @@ class Level:
                         # spawn (at most) one new barrel here
                         self.board.insert(*pos, Barrel(d.color, e.orientation))
                         break
+
+    def apply_shifts(self):
+        for pos, e in list(self.board.get_all(filter_type=Barrel)):       # list() avoids concurrent modification
+            if e.moves:
+                dest = pos + e.shift
+                if self.is_walkable(dest):
+                    # move the entity to the dest
+                    self.board.remove(*pos, e)
+                    self.board.insert(*dest, e)
+                    # TODO: barrel leak stuff here
 
     def apply_translations(self):
         for pos, e in list(self.board.get_all(filter_type=Barrel)):       # list() avoids concurrent modification
@@ -230,6 +237,21 @@ class Level:
                 res = sum(mergable[1:], mergable[0])
                 self.board.remove(*pos, *mergable)
                 self.board.insert(*pos, res)
+    
+    def apply_pistons(self):
+        # reset all `shift`s
+        for _, e in self.board.get_all(filter_type=Barrel):
+            e.shift = Direction.NONE
+        
+        for pos, e in list(self.board.get_all(filter_type=Piston)):
+            if e.activated:
+                focus = pos + e.orientation
+                for d in self.board.get(*focus):
+                    if d.moves:
+                        d.shift = e.orientation
+                        d.velocity = e.orientation
+                        # self.board.remove(*focus, d)
+                        # self.board.insert(*(focus + d.shift), d)
     
     def apply_rotations(self):
         for pos, e in list(self.board.get_all(filter_type=Boostpad)):
