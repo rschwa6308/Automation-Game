@@ -29,6 +29,8 @@ class Entity:
 
     def __init__(self, locked: bool):
         self.locked = locked
+        self.animations = []
+        # self.garbage = False    # flag for deletion on next step
     
     def get_widgets(self) -> Sequence[Widget]:
         return []
@@ -113,7 +115,6 @@ class Barrel(Block):
         super().__init__(locked)
         self.color = color
         self.velocity = velocity
-        self.shift: Direction = Direction.NONE  # represents a linear shift (e.g. from a piston)
         self.leaky = False
         self.draw_center = V2(0, 0)
 
@@ -122,38 +123,27 @@ class Barrel(Block):
     
     @staticmethod
     def travel_curve(x):
-        """integral of speed curve f'(x) = 2 - 2|2x - 1| with 0.5 hang time at the end"""
-        if x <= 0.25:
-            return 8 * x**2
-        elif x <= 0.5:
-            x -= 0.25
-            return 0.5 + (4*x - 8*x**2)
-        else:
-            return 1.0
+        """integral of speed curve f'(x) = 2 - 2|2x - 1|"""
+        return 1/2 * (-1 + 4*x + (1 - 2*x)**2 * sgn(1/2 - x))
+
 
     def draw_onto_base(self, surf: pg.Surface, rect: pg.Rect, edit_mode: bool, step_progress: float = 0.0, neighborhood = (([],) * 5,) * 5):
         s = rect.width
         self.draw_center = V2(*rect.center)
-        # travel phase (`velocity`)
-        if step_progress < 0.5:
-            amt = 0
-        else:
-            amt = 2 * (step_progress - 0.5)
-        travel = self.travel_curve(amt)   
-        self.draw_center += self.velocity * (s - 1) * travel
-        # `shift` phase
-        if self.shift is not Direction.NONE:
-            # linear travel from [0.11, 0.11 + 1/16] at speed 8, normal travel from (0.11 + 1/16, 0.5]
-            # makes it look like barrel is being pushed and slides to a halt
-            a = 0.037   # fine tune 'collision' with piston head
-            b = a + 1/16
-            if step_progress <= a:
-                amt = 0
-            elif step_progress <= b:
-                amt = 8 * (step_progress - a)
-            else:
-                amt = self.travel_curve(0.25 + 2 * (step_progress - b))
-            self.draw_center += self.shift * (s - 1) * amt
+
+        for anim in self.animations:
+            if anim[0] == "translate":
+                amt = self.travel_curve(step_progress)
+                self.draw_center += anim[1] * (s - 1) * (amt - 1)
+            elif anim[0] == "shift":
+                a = 0.18
+                if step_progress < a:
+                    amt = 0
+                elif step_progress < 0.5:
+                    amt = (step_progress - a) * 2 * Piston.max_amt
+                else:
+                    amt = self.travel_curve(step_progress)
+                self.draw_center += anim[1] * (s - 1) * (amt - 1)
 
         draw_radius = s * 0.3
         draw_color_rgb = self.color.rgb()
@@ -163,8 +153,8 @@ class Barrel(Block):
         n = len(neighborhood)
         for x in range(-n//2, n//2 + 1):
             for y in range(-n//2, n//2 + 1):
-                if x == 0 and y == 0: continue  # skip self
                 for e in neighborhood[y + n//2][x + n//2]:
+                    if e is self: continue  # skip self
                     if isinstance(e, Barrel):
                         dist = (e.draw_center - self.draw_center).length()
                         if dist < draw_radius * 2:
@@ -310,6 +300,8 @@ class Piston(Block):
     name = "Piston"
     ascii_str = "P"
     orients = True
+    
+    max_amt = 0.75
 
     # boostpads are unlocked by default
     def __init__(self, orientation: Direction = Direction.NORTH, locked: bool = False):
@@ -326,18 +318,13 @@ class Piston(Block):
     
     def draw_onto_base(self, surf: pg.Surface, rect: pg.Rect, edit_mode: bool, step_progress: float, neighborhood):
         s = rect.width
-        max_amt = 0.75
-        # extend head at speed 8, then retract head at speed 8
-        t = max_amt / 8
-        if step_progress <= t:
-            amt = 8 * step_progress
-        elif step_progress <= 2*t:
-            amt = max_amt - 8 * (step_progress - t)
-        else:
-            amt = 0
-        
-        extension = round(s * amt)
-        # extension = round(max_extension * (1 - abs(2*amt - 1))) if self.activated else 0
+        extension = 0
+
+        for anim in self.animations:
+            if anim[0] == "extend":
+                # linear travel out and back
+                amt = (1 - abs(2 * step_progress - 1)) * self.max_amt
+                extension = round(s * amt)
 
         padding = round(s * 0.1)
         temp = pg.Surface(rect.inflate(s * 2, s * 2).size, pg.SRCALPHA)

@@ -170,6 +170,13 @@ class Level:
 
         self.step_count = 0
         self.won = False
+
+        self.substeps = [
+            [self.apply_resource_extractors, self.apply_translations],
+            [self.apply_merges, self.apply_pistons],
+            [self.apply_merges, self.apply_rotations, self.apply_targets],
+        ]
+        self.current_substep = 0
     
     def __str__(self):
         return str(self.board)
@@ -179,26 +186,20 @@ class Level:
         cell = self.board.get(*coords)
         return not any(e.stops for e in cell)
     
-    def step(self):
-        """step the level one time unit"""
-        # TODO: overhaul so that execution is always one step ahead of drawing
-        self.apply_shifts()
-        self.apply_merges()
+    def substep(self):
+        # print("substep:", str(self.substeps[self.current_substep]))
+        # clear animation queues
+        for _, e in self.board.get_all():
+            e.animations.clear()
 
-        self.apply_translations()
-        self.apply_merges()
-
-        self.apply_resource_extractors()
-
-        self.apply_pistons()    # TODO: wiring stuff here
-
-        self.apply_rotations()
-
-        self.apply_targets()
-
-        self.check_won()
+        # execute substep
+        for fun in self.substeps[self.current_substep]:
+            fun()
         
-        self.step_count += 1
+        self.current_substep += 1
+        if self.current_substep >= len(self.substeps):
+            self.current_substep = 0
+            self.step_count += 1
     
     def apply_resource_extractors(self):
         for pos, e in list(self.board.get_all(filter_type=ResourceExtractor)):     # list() avoids concurrent modification
@@ -209,16 +210,6 @@ class Level:
                         self.board.insert(*pos, Barrel(d.color, e.orientation))
                         break
 
-    def apply_shifts(self):
-        for pos, e in list(self.board.get_all(filter_type=Barrel)):       # list() avoids concurrent modification
-            if e.moves:
-                dest = pos + e.shift
-                if self.is_walkable(dest):
-                    # move the entity to the dest
-                    self.board.remove(*pos, e)
-                    self.board.insert(*dest, e)
-                    # TODO: barrel leak stuff here
-
     def apply_translations(self):
         for pos, e in list(self.board.get_all(filter_type=Barrel)):       # list() avoids concurrent modification
             if e.moves:
@@ -227,6 +218,7 @@ class Level:
                     # move the entity to the dest
                     self.board.remove(*pos, e)
                     self.board.insert(*dest, e)
+                    e.animations.append(("translate", e.velocity))
                     # TODO: barrel leak stuff here
 
     def apply_merges(self):
@@ -235,23 +227,23 @@ class Level:
             if len(mergable) > 1:
                 # merge repeatably
                 res = sum(mergable[1:], mergable[0])
+                # for e in mergable:
+                #     e.garbage = True    # mark for deletion on next substep
                 self.board.remove(*pos, *mergable)
                 self.board.insert(*pos, res)
     
-    def apply_pistons(self):
-        # reset all `shift`s
-        for _, e in self.board.get_all(filter_type=Barrel):
-            e.shift = Direction.NONE
-        
+    def apply_pistons(self):        
         for pos, e in list(self.board.get_all(filter_type=Piston)):
             if e.activated:
+                e.animations.append(("extend",))
                 focus = pos + e.orientation
                 for d in self.board.get(*focus):
                     if d.moves:
-                        d.shift = e.orientation
                         d.velocity = e.orientation
-                        # self.board.remove(*focus, d)
-                        # self.board.insert(*(focus + d.shift), d)
+                        d.animations.append(("shift", e.orientation))
+                        self.board.remove(*focus, d)
+                        self.board.insert(*(focus + e.orientation), d)
+                        
     
     def apply_rotations(self):
         for pos, e in list(self.board.get_all(filter_type=Boostpad)):

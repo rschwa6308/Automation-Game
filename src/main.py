@@ -54,7 +54,7 @@ MAX_GRID_LINE_WIDTH         = 5
 SHELF_ANIMATION_SPEED   = 15    # pixels per frame
 EDITOR_ANIMATION_SPEED  = 30    # pixels per frame
 
-LEVEL_STEP_INTERVAL = 2000  # milliseconds
+LEVEL_SUBSTEP_INTERVAL = 500    # milliseconds
 FAST_FORWARD_FACTOR = 3
 
 
@@ -131,7 +131,7 @@ class LevelRunner:
 
         self.shelf_state = "open"       # "open", "closed", "opening", or "closing"
         self.editor_state = "closed"    # "open", "closed", "opening", or "closing"
-        self.step_progress = 0.0        # float in [0, 1) denoting fraction of current step completed (for animation)
+        self.substep_progress = 0.0        # float in [0, 1) denoting fraction of current step completed (for animation)
 
         # initialize camera to contain `level.board` (with some margin)
         rect = level.board.get_bounding_rect(margin=3)   # arbitrary value
@@ -202,12 +202,11 @@ class LevelRunner:
 
             # handle level execution
             if not self.edit_mode and not self.paused:
-                interval = LEVEL_STEP_INTERVAL / (FAST_FORWARD_FACTOR if self.fast_forward else 1)
-                self.step_progress += clock.get_time() / interval
-                if self.step_progress >= 1.0:
-                    self.step_progress -= 1.0
-                    # TODO: overhaul this system so that execution is always one step ahead of drawing
-                    self.level.step()
+                interval = LEVEL_SUBSTEP_INTERVAL / (FAST_FORWARD_FACTOR if self.fast_forward else 1)
+                self.substep_progress += clock.get_time() / interval
+                if self.substep_progress >= 1.0:
+                    self.substep_progress -= 1.0
+                    self.level.substep()
                     if self.level.won:
                         pass
                         # print("good job")
@@ -309,7 +308,7 @@ class LevelRunner:
                 self.level.load_saved_state()   # revert board and palette
                 self.edit_mode = True
                 self.viewport_changed = True
-        self.step_progress = 0.0
+        self.substep_progress = 0.0
 
     def handle_keydown(self, key):
         if key == pg.K_ESCAPE:
@@ -480,7 +479,7 @@ class LevelRunner:
             ]
             for e in sorted(cell, key=lambda e: e.draw_precedence):
                 rect = pg.Rect(*draw_pos, s + 1, s + 1)
-                e.draw_onto(self.viewport_surf, rect, self.edit_mode, self.selected_entity is e, self.step_progress, neighborhood)
+                e.draw_onto(self.viewport_surf, rect, self.edit_mode, self.selected_entity is e, self.substep_progress, neighborhood)
                 
         # draw grid with dynamic line width
         for x in range(grid_rect.width):
