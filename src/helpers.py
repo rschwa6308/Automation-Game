@@ -1,7 +1,6 @@
 from enum import Enum
 import math
 from typing import Sequence
-
 import pygame as pg
 import pygame.freetype
 

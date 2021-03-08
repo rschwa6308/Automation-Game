@@ -4,105 +4,12 @@ from math import floor, ceil
 import pygame as pg
 
 from entities import Entity
-from widgets import Widget
-from engine import Level
+from widgets import Widget, WireEditor
+from engine import Board, Level
+from rendering import Camera, DEFAULT_CELL_SIZE, SnapshotProvider, render_board
 from levels import test_level, test_level2, resource_test
 from helpers import V2, draw_aapolygon, draw_rect_alpha, render_text_centered, clamp, wrap_text
-
-
-# Display-Related Constants
-DEFAULT_SCREEN_WIDTH    = 1000
-DEFAULT_SCREEN_HEIGHT   = 800
-
-MIN_SCREEN_WIDTH        = 300
-MIN_SCREEN_HEIGHT       = 200
-
-TARGET_FPS              = 60
-
-
-# Layout-Related Constants
-DEFAULT_CELL_SIZE       = 64
-
-SHELF_HEIGHT            = 100
-EDITOR_WIDTH            = 200
-
-PALETTE_ITEM_SIZE       = 64
-PALETTE_ITEM_SPACING    = 8 
-SHELF_ICON_SIZE         = 48    # (play/pause button size)
-SHELF_ICON_SPACING      = 16
-SHELF_ICON_PADDING      = 25
-EDITOR_WIDGET_SPACING   = 8 
-
-
-# Aesthetics-Related Constants
-VIEWPORT_BG_COLOR           = (255, 255, 255)
-SHELF_BG_COLOR              = (127, 127, 127, 240)  # mostly opaque
-EDITOR_BG_COLOR             = (127, 127, 127, 240)  # mostly opaque
-GRID_LINE_COLOR             = (0, 0, 0)
-SHELF_ICON_BG_COLOR         = (127, 127, 127, 191)  # 3/4 opaque
-SHELF_ICON_BG_COLOR_PRESSED = (150, 150, 150, 191)  # 3/4 opaque
-SHELF_ICON_COLOR            = (0, 0, 0)
-SHELF_ICON_COLOR_PRESSED    = (63, 63, 63)
-SHELF_ICON_COLOR_OFF        = (110, 110, 110)
-
-DEFAULT_GRID_LINE_WIDTH     = 2
-MIN_GRID_LINE_WIDTH         = 1
-MAX_GRID_LINE_WIDTH         = 5
-
-
-# Misc Constants
-SHELF_ANIMATION_SPEED   = 15    # pixels per frame
-EDITOR_ANIMATION_SPEED  = 30    # pixels per frame
-
-LEVEL_SUBSTEP_INTERVAL = 500    # milliseconds
-FAST_FORWARD_FACTOR = 3
-
-
-class Camera:
-    """stores a center point and a zoom level (using floating-point board coordinates)"""
-
-    min_zoom_level = 0.4
-    max_zoom_level = 4.0
-
-    pan_speed = 0.15
-    zoom_speed = 0.10
-
-    def __init__(self, center: V2, zoom_level: float):
-        self.center = center
-        self.zoom_level = clamp(zoom_level, self.min_zoom_level, self.max_zoom_level)
-    
-    def pan(self, disp: V2):
-        """translate `center` by the given displacement (scaled according to zoom level)"""
-        self.center += disp * self.pan_speed * (1 / self.zoom_level)
-    
-    def pan_abs(self, disp: V2):
-        """translate `center` by the given displacement"""
-        self.center += disp
-    
-    def zoom(self, amt: float, pivot: V2):
-        """increase zoom level by `amt` about `pivot`"""
-        amt *= self.zoom_speed
-        amt = min(amt, self.max_zoom_level - self.zoom_level)
-        amt = max(amt, self.min_zoom_level - self.zoom_level)
-
-        # pan to keep pivot in same location on screen
-        disp_px_before = (pivot - self.center) * self.zoom_level
-        self.zoom_level += amt
-        disp_px_after = (pivot - self.center) * self.zoom_level
-
-        diff_px = disp_px_after - disp_px_before
-        diff = diff_px / self.zoom_level
-        self.pan_abs(diff)
-    
-    def get_cell_size_px(self):
-        s = round(DEFAULT_CELL_SIZE * self.zoom_level)
-        return s - s%2  # force even
-    
-    def get_world_coords(self, pos: V2, screen_width, screen_height):
-        """converts the given pixel `pos` to world coordinates"""
-        screen_center = V2(screen_width / 2, screen_height / 2)
-        diff = pos - screen_center
-        return self.center + diff * (1 / self.get_cell_size_px())
+from constants import *
 
 
 class LevelRunner:
@@ -128,6 +35,8 @@ class LevelRunner:
         self.edit_mode = True
         self.paused = False
         self.fast_forward = False
+
+        self.wiring_widget: WireEditor = None       # if not None, the WireEditor that is currently being used
 
         self.shelf_state = "open"       # "open", "closed", "opening", or "closing"
         self.editor_state = "closed"    # "open", "closed", "opening", or "closing"
@@ -155,6 +64,8 @@ class LevelRunner:
         self.palette_rects: Sequence[Tuple[pg.Rect, Type[Entity]]]  = []    # store palette item rects for easier collision
         self.widget_rects: Sequence[Tuple[pg.Rect, Widget]]         = []    # store widget rects for easier collision
         self.shelf_icon_rects: Sequence[Tuple[pg.Rect, str]]        = []    # store shelf icon rects for easier collision
+
+        self.snapshot_provider = SnapshotProvider(self.level)
 
     def run(self):
         """run the level in a resizable window at `TARGET_FPS`"""
@@ -243,6 +154,8 @@ class LevelRunner:
                 self.screen.blit(self.editor_surf, (self.screen_width - self.editor_width_onscreen, 0))
                 # draw held entity at cursor
                 self.draw_held_entity()
+                # draw wiring mode indicator
+                self.draw_wiring_indicator()
                 # draw play/pause controls
                 self.draw_shelf_icons()
                 self.reblit_needed = False
@@ -301,7 +214,6 @@ class LevelRunner:
                 self.edit_mode = False
                 self.paused = False
                 self.level.save_state()         # freeze current board/palette state
-                # self.level.step()               # step once
                 self.viewport_changed = True
             elif not self.edit_mode:
                 self.shelf_state = "opening"
@@ -355,9 +267,13 @@ class LevelRunner:
                 if rect.collidepoint(*self.mouse_pos):
                     self.pressed_icon = icon
                     self.reblit_needed = True
-
+            
             if not self.edit_mode:
                 return
+
+            entity_clicked = None
+            clicked_wire_widget = False
+
             # handle entity holding (left click)
             if self.mouse_pos.y >= self.screen_height - self.shelf_height_onscreen:
                 # cursor is over shelf
@@ -376,7 +292,10 @@ class LevelRunner:
                 adjusted_pos = self.mouse_pos - V2(self.screen_width - self.editor_width_onscreen, 0)
                 for hitbox, widget in self.widget_rects:
                     if hitbox.collidepoint(*adjusted_pos):
-                        widget.handle_click(adjusted_pos)
+                        clicked_wire_widget = widget.handle_click(adjusted_pos)
+                        if clicked_wire_widget:
+                            self.finish_wiring(None)    # deselect previously selected wire widget
+                            self.wiring_widget = widget
                         self.editor_changed = True      # just redraw every time (easier)
                         self.viewport_changed = True    # ^^^
                         break
@@ -386,18 +305,23 @@ class LevelRunner:
                 pos = pos_float.floor()
                 cell = self.level.board.get(*pos)
                 if cell:
-                    e = cell[-1]    # select last element; TODO: figure out if this is a problem lol
+                    entity_clicked = cell[-1]    # click last element; TODO: figure out if this is a problem lol
+            
+                if self.wiring_widget is None:  # don't change selection if in wiring mode
                     # deselect current selection if clicking on something else
-                    if self.selected_entity is not e:
+                    if self.selected_entity is not entity_clicked:
                         self.deselect_entity()
-                    if not e.locked:
+                    if entity_clicked is not None and not entity_clicked.locked:
                         # pick up entity (from board)
-                        self.held_entity = e
+                        self.held_entity = entity_clicked
                         self.hold_point = pos_float.fmod(1)
                         self.level.board.remove(*pos, self.held_entity)
                         self.viewport_changed = True
-                else:
-                    self.deselect_entity()
+                    else:
+                        self.deselect_entity()
+
+            if not clicked_wire_widget:
+                self.finish_wiring(entity_clicked)
    
     def handle_mousebuttonup(self, button):
         # left click
@@ -440,73 +364,14 @@ class LevelRunner:
             self.camera.pan_abs(-disp)
             self.viewport_changed = True
         
-        if self.held_entity is not None:
+        if self.held_entity is not None or self.wiring_widget is not None:
             self.reblit_needed = True
 
     def draw_level(self):
         """draw the level onto `viewport_surf` using `self.step_progress` for animation state"""
-        # TODO: draw carpets, then grid, then blocks
-        # z_pos:     < 0          = 0        > 0
-        self.viewport_surf.fill(VIEWPORT_BG_COLOR)
+        render_board(self.level.board, self.viewport_surf, self.camera, self.edit_mode, self.selected_entity, self.substep_progress)
 
-        s = self.camera.get_cell_size_px()
-        surf_center = V2(*self.viewport_surf.get_rect().center)
-        surf_width, surf_height = self.viewport_surf.get_size()
-
-        def grid_to_px(pos: V2) -> V2:
-            return (surf_center + (pos - self.camera.center) * s).floor()
-
-        w = surf_width / s + 2
-        h = surf_height / s + 2
-        grid_rect = pg.Rect(
-            floor(self.camera.center.x - w / 2),
-            floor(self.camera.center.y - h / 2),
-            ceil(w) + 1,
-            ceil(h) + 1
-        )
-        
-        grid_line_width = round(DEFAULT_GRID_LINE_WIDTH * self.camera.zoom_level ** 0.5)
-        grid_line_width = clamp(grid_line_width, MIN_GRID_LINE_WIDTH, MAX_GRID_LINE_WIDTH)
-        # grid_line_width = 1
-
-        # draw board
-        for grid_pos, cell in self.level.board.get_cells(grid_rect):
-            if not cell: continue
-            draw_pos = grid_to_px(grid_pos)
-            neighborhood = [
-                [self.level.board.get(*(grid_pos + V2(x_offset, y_offset))) for x_offset in range(-2, 3)]
-                for y_offset in range(-2, 3)
-            ]
-            for e in sorted(cell, key=lambda e: e.draw_precedence):
-                rect = pg.Rect(*draw_pos, s + 1, s + 1)
-                e.draw_onto(self.viewport_surf, rect, self.edit_mode, self.selected_entity is e, self.substep_progress, neighborhood)
-                
-        # draw grid with dynamic line width
-        for x in range(grid_rect.width):
-            x_grid = grid_rect.left + x
-            x_px, _ = grid_to_px(V2(x_grid, 0))
-            pg.draw.line(
-                self.viewport_surf,
-                GRID_LINE_COLOR,
-                (x_px, 0),
-                (x_px, surf_height),
-                width=grid_line_width
-            )
-        for y in range(grid_rect.height):
-            y_grid = grid_rect.top + y
-            _,  y_px = grid_to_px(V2(0, y_grid))
-            pg.draw.line(
-                self.viewport_surf,
-                GRID_LINE_COLOR,
-                (0, y_px),
-                (surf_width, y_px),
-                width=grid_line_width
-            )
-
-    def draw_shelf(self):
-        if self.shelf_state == "closed":
-            return      # NoOp
-        
+    def draw_shelf(self):        
         self.shelf_surf.fill(SHELF_BG_COLOR)
 
         # draw palette
@@ -551,20 +416,34 @@ class LevelRunner:
         # draw widgets
         y_pos += EDITOR_WIDGET_SPACING
         self.widget_rects.clear()
-        for w in self.selected_entity.get_widgets():
+        for w in self.selected_entity.widgets:
             h = EDITOR_WIDTH / w.aspect_ratio
             rect = pg.Rect(0, y_pos, EDITOR_WIDTH, h)
-            w.draw_onto(self.editor_surf, rect)
+            w.draw_onto(self.editor_surf, rect, snapshot_provider=self.snapshot_provider)
             self.widget_rects.append((rect, w))
             y_pos += h + EDITOR_WIDGET_SPACING
 
     def draw_held_entity(self):
-        if self.held_entity is None:
-            return
+        if self.held_entity is None: return
         s = self.camera.get_cell_size_px()
         rect = pg.Rect(*self.mouse_pos, s + 1, s + 1)
-        rect.move_ip(*(-self.hold_point * s - V2(1, 1)))
+        rect.move_ip(*(-self.hold_point * s))
         self.held_entity.draw_onto(self.screen, rect, self.edit_mode)   # pass in True here to show selection highlight
+
+        # TODO: draw wiring while moving entity
+
+    def draw_wiring_indicator(self):
+        if self.wiring_widget is None: return
+
+        # TEMPORARY: copied from `render_board`
+        s = self.camera.get_cell_size_px()
+        def grid_to_px(pos: V2) -> V2:
+            return (V2(*self.viewport_surf.get_rect().center) + (pos - self.camera.center) * s).floor()
+
+        start = grid_to_px(self.level.board.find(self.selected_entity) + V2(0.5, 0.5))
+        wire_width = round(DEFAULT_GRID_LINE_WIDTH * self.camera.zoom_level ** 0.5)
+        pg.draw.line(self.screen, WIRE_COLOR, tuple(start), tuple(self.mouse_pos), wire_width)
+
 
     def select_entity(self, entity):
         self.selected_entity = entity
@@ -652,6 +531,42 @@ class LevelRunner:
                     (rect.left + rect.width // 2.2, rect.bottom),
                     (rect.right, rect.centery)
                 ], color)
+
+    def finish_wiring(self, e):
+        if self.wiring_widget is None: return           # NoOp
+
+        successful = False
+
+        if e is None or e is self.wiring_widget.entity: # cannot connect to self
+            # clear connection
+            self.wiring_widget.set_value(None, None)
+            successful = True
+        else:
+            # only connect if input-output or output-input and target (`e`) has slot available
+            ao = e.available_outputs()
+            ai = e.available_inputs()
+            if self.wiring_widget.is_input and ao:
+                j = min(ao)
+                self.wiring_widget.set_value(e, j)
+                e.wirings[j][1] = self.wiring_widget.entity     # other side of connection
+                e.wirings[j][2] = self.wiring_widget.wire_index # ^^^
+                successful = True
+            elif not self.wiring_widget.is_input and ai:
+                j = min(ai)
+                self.wiring_widget.set_value(e, j)
+                e.wirings[j][1] = self.wiring_widget.entity     # other side of connection
+                e.wirings[j][2] = self.wiring_widget.wire_index # ^^^
+                successful = True
+                    
+        if successful:
+            self.wiring_widget.in_use = False
+            self.wiring_widget = None
+            self.editor_changed = True
+            self.viewport_changed = True
+        else:
+            # TODO: maybe play a sound here (or otherwise indicate soft failure)
+            print("INVALID CONNECTION (no compatible un-used ports)")
+
 
 if __name__ == "__main__":
     LevelRunner(test_level2).run()

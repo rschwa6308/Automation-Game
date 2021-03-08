@@ -113,6 +113,16 @@ class Board:
         
         return grid
 
+    def find(self, entitiy: Entity) -> V2:
+        """
+        return the coordinates of the given entity, or None if not found;
+        SLOW - should be used sparingly (e.g. for taking snapshots)
+        """
+        for pos, e in self.get_all(filter_type=type(entitiy)):
+            if e is entitiy:
+                return pos
+        return None
+
     def __str__(self):
         def get_ascii_str(cell):
             return "".join(e.ascii_str for e in cell).rjust(2, ".")
@@ -265,6 +275,7 @@ class Level:
     def reset(self):
         self.board, self.palette = self.starting_state
         self.step_count = 0
+        self.current_substep = 0
         self.won = False
     
     def save_state(self):
@@ -275,6 +286,7 @@ class Level:
         """revert `board` and `palette` to their states at the last call to `save_state`"""
         self.board, self.palette = self.saved_state
         self.step_count = 0
+        self.current_substep = 0
         self.won = False
 
 

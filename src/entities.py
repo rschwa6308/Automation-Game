@@ -1,6 +1,6 @@
 # --- Level Entities --- #
 from __future__ import annotations  # allows self-reference in type annotations
-from typing import Sequence
+from typing import Collection, Generator, Sequence, Tuple
 from abc import abstractmethod
 
 import pygame as pg
@@ -10,11 +10,11 @@ from pygame.transform import threshold
 
 from helpers import V2, Direction, draw_aacircle, draw_chevron, draw_rectangle, render_text_centered, interpolate_colors, sgn
 from colors import Color
-from widgets import DirectionEditor, SmallIntEditor, Spacing, Widget
+from widgets import DirectionEditor, SmallIntEditor, Spacing, Widget, WireEditor
+from constants import *
 
 
 VELOCITY_CHEVRON_COLOR      = (0, 0, 0)
-HIGHLIGHT_COLOR             = (255, 255, 0)
 HIGHLIGHT_THICKNESS_MULT    = 0.10
 
 HIGHLIGHT_INFLATION_FACTOR  = 1.2
@@ -30,11 +30,23 @@ class Entity:
     def __init__(self, locked: bool):
         self.locked = locked
         self.animations = []
+        self.wirings = []
         # self.garbage = False    # flag for deletion on next step
     
-    def get_widgets(self) -> Sequence[Widget]:
-        return []
+    def available_inputs(self) -> Collection[int]:
+        res = []
+        for i, (inp, e, j) in enumerate(self.wirings):
+            if inp and e is None:
+                res.append(i)
+        return res
 
+    def available_outputs(self) -> Collection[int]:
+        res = []
+        for i, (inp, e, j) in enumerate(self.wirings):
+            if not inp and e is None:
+                res.append(i)
+        return res
+    
     @abstractmethod
     def draw_onto(
         self,
@@ -215,9 +227,8 @@ class ResourceExtractor(Block):
         self.orientation = orientation
         self.period = 3
         self.phase = 1
-    
-    def get_widgets(self) -> Sequence[Widget]:
-        return [
+
+        self.widgets = [
             DirectionEditor(self, "orientation"),
             # Spacing(20.0),
             SmallIntEditor(self, "period", (1, 5)),
@@ -251,9 +262,8 @@ class Boostpad(Carpet):
         if (orientation is Direction.NONE):
             raise ValueError("Boostpad orientation cannot be `Direction.NONE`")
         self.orientation = orientation
-    
-    def get_widgets(self) -> Sequence[Widget]:
-        return [
+
+        self.widgets = [
             DirectionEditor(self, "orientation")
         ]
     
@@ -309,14 +319,22 @@ class Piston(Block):
         if (orientation is Direction.NONE):
             raise ValueError("Boostpad orientation cannot be `Direction.NONE`")
         self.orientation = orientation
-        self.activated = True   # FOR TESTING
-    
-    def get_widgets(self) -> Sequence[Widget]:
-        return [
-            DirectionEditor(self, "orientation")
+        self.activated = True       # FOR TESTING
+        
+        # format is [(is_input, other_entity, other_entity's wire_index)]
+        self.wirings: Sequence[Tuple[bool, Entity, int]] = [
+            [True, None, None],
+            [False, None, None]
         ]
+
+        self.widgets = [
+            DirectionEditor(self, "orientation"),
+            WireEditor(self, 0, "test in"),
+            WireEditor(self, 1, "test out"),
+        ]
+
     
-    def draw_onto_base(self, surf: pg.Surface, rect: pg.Rect, edit_mode: bool, step_progress: float, neighborhood):
+    def draw_onto_base(self, surf: pg.Surface, rect: pg.Rect, edit_mode: bool, step_progress: float = 0.0, neighborhood = (([],) * 5,) * 5):
         s = rect.width
         extension = 0
 
