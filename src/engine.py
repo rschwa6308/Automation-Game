@@ -100,7 +100,7 @@ class Board:
 
         return pg.Rect(min_x, min_y, max_x - min_x + 1, max_y - min_y + 1)
 
-    def get_grid(self, margin: int = 0) -> Sequence[Sequence[Collection[Entity]]]:
+    def get_grid(self, margin: int = 0) -> Sequence[Sequence[Optional[Collection[Entity]]]]:
         """compute minimal dense-matrix representation (with the given margin)"""
         bounding_rect = self.get_bounding_rect(margin=margin)
 
@@ -113,7 +113,7 @@ class Board:
         
         return grid
 
-    def find(self, entitiy: Entity) -> V2:
+    def find(self, entitiy: Entity) -> Optional[V2]:
         """
         return the coordinates of the given entity, or None if not found;
         SLOW - should be used sparingly (e.g. for taking snapshots)
@@ -289,21 +289,21 @@ class Level:
         self.current_substep = 0
         self.won = False
 
-
-from time import sleep
-
-if __name__ == "__main__":
-
-    test_board = Board({
-        (3, 3): [ResourceTile(Color.RED), ResourceExtractor()],
-        (5, 4): [Barrel(Color.RED, Direction.EAST)],
-        (8, 7): [Barrel(Color.YELLOW, Direction.SOUTH)]
-    })
-
-    test_level = Level(test_board)
-
-    for _ in range(10):
-        print(test_level)
-        print()
-        sleep(1)
-        test_level.step()
+#
+# from time import sleep
+#
+# if __name__ == "__main__":
+#
+#     test_board = Board({
+#         (3, 3): [ResourceTile(Color.RED), ResourceExtractor()],
+#         (5, 4): [Barrel(Color.RED, Direction.EAST)],
+#         (8, 7): [Barrel(Color.YELLOW, Direction.SOUTH)]
+#     })
+#
+#     test_level = Level(test_board)
+#
+#     for _ in range(10):
+#         print(test_level)
+#         print()
+#         sleep(1)
+#         test_level.step()

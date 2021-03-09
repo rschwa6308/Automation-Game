@@ -35,7 +35,9 @@ test_board2 = Board({
         # (5, -7): [Barrel(Color.BLUE)],
     })
 
-test_level2 = Level(test_board2, Palette())
+test_level2 = Level(test_board2, Palette({
+    Sensor: 2
+}))
 
 
 

@@ -1,5 +1,5 @@
 # --- Rendering and UI --- #
-from typing import Union, Type, Sequence, Tuple
+from typing import Union, Type, Sequence, Tuple, Optional
 from math import floor, ceil
 import pygame as pg
 
@@ -36,7 +36,7 @@ class LevelRunner:
         self.paused = False
         self.fast_forward = False
 
-        self.wiring_widget: WireEditor = None       # if not None, the WireEditor that is currently being used
+        self.wiring_widget: Optional[WireEditor] = None     # if not None, the WireEditor that is currently being used
 
         self.shelf_state = "open"       # "open", "closed", "opening", or "closing"
         self.editor_state = "closed"    # "open", "closed", "opening", or "closing"
@@ -59,7 +59,7 @@ class LevelRunner:
 
         self.selected_entity: Union[Entity, None] = None
 
-        self.pressed_icon: str = None
+        self.pressed_icon: Optional[str] = None
 
         self.palette_rects: Sequence[Tuple[pg.Rect, Type[Entity]]]  = []    # store palette item rects for easier collision
         self.widget_rects: Sequence[Tuple[pg.Rect, Widget]]         = []    # store widget rects for easier collision
@@ -434,7 +434,18 @@ class LevelRunner:
         rect.move_ip(*(-self.hold_point * s))
         self.held_entity.draw_onto(self.screen, rect, self.edit_mode)   # pass in True here to show selection highlight
 
-        # TODO: draw wiring while moving entity
+        # TEMPORARY: copied from `render_board`
+        s = self.camera.get_cell_size_px()
+        def grid_to_px(pos: V2) -> V2:
+            return (V2(*self.viewport_surf.get_rect().center) + (pos - self.camera.center) * s).floor()
+
+        # draw wiring while moving entity
+        wire_width = round(DEFAULT_GRID_LINE_WIDTH * self.camera.zoom_level ** 0.5)
+        for _, other, _ in self.held_entity.wirings:
+            if other is not None:
+                other_pos = grid_to_px(self.level.board.find(other) + V2(0.5, 0.5))
+                pg.draw.line(self.screen, WIRE_COLOR, tuple(other_pos), rect.center, wire_width)
+
 
     def draw_wiring_indicator(self):
         if self.wiring_widget is None: return

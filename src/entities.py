@@ -1,7 +1,8 @@
 # --- Level Entities --- #
 from __future__ import annotations  # allows self-reference in type annotations
-from typing import Collection, Generator, Sequence, Tuple
+from typing import Collection, Generator, Sequence, Tuple, Optional
 from abc import abstractmethod
+from math import pi
 
 import pygame as pg
 import pygame.freetype
@@ -259,7 +260,7 @@ class Boostpad(Carpet):
     # boostpads are unlocked by default
     def __init__(self, orientation: Direction = Direction.NORTH, locked: bool = False):
         super().__init__(locked)
-        if (orientation is Direction.NONE):
+        if orientation is Direction.NONE:
             raise ValueError("Boostpad orientation cannot be `Direction.NONE`")
         self.orientation = orientation
 
@@ -316,13 +317,13 @@ class Piston(Block):
     # boostpads are unlocked by default
     def __init__(self, orientation: Direction = Direction.NORTH, locked: bool = False):
         super().__init__(locked)
-        if (orientation is Direction.NONE):
+        if orientation is Direction.NONE:
             raise ValueError("Boostpad orientation cannot be `Direction.NONE`")
         self.orientation = orientation
         self.activated = True       # FOR TESTING
         
         # format is [(is_input, other_entity, other_entity's wire_index)]
-        self.wirings: Sequence[Tuple[bool, Entity, int]] = [
+        self.wirings: Sequence[Sequence[bool, Entity, int]] = [
             [True, None, None],
             [False, None, None]
         ]
@@ -333,7 +334,6 @@ class Piston(Block):
             WireEditor(self, 1, "test out"),
         ]
 
-    
     def draw_onto_base(self, surf: pg.Surface, rect: pg.Rect, edit_mode: bool, step_progress: float = 0.0, neighborhood = (([],) * 5,) * 5):
         s = rect.width
         extension = 0
@@ -380,7 +380,55 @@ class Piston(Block):
         surf.blit(temp, rect.inflate(s * 2, s * 2))
 
 
+class Sensor(Block):
+    name = "Piston"
+    ascii_str = "S"
+    orients = True
+
+    def __init__(self, orientation: Direction = Direction.NORTH, locked: bool = False):
+        super().__init__(locked)
+        if orientation is Direction.NONE:
+            raise ValueError("Boostpad orientation cannot be `Direction.NONE`")
+        self.orientation = orientation
+        self.activated = True       # FOR TESTING
+        
+        # format is [(is_input, other_entity, other_entity's wire_index)]
+        self.wirings: Sequence[Sequence[bool, Entity, int]] = [
+            [False, None, None]
+        ]
+
+        self.widgets = [
+            DirectionEditor(self, "orientation"),
+            WireEditor(self, 0, "test out"),
+        ]
+    
+    def draw_onto_base(self, surf: pg.Surface, rect: pg.Rect, edit_mode: bool, step_progress: float = 0.0, neighborhood = (([],) * 5,) * 5):
+        eye_box_width = rect.width * 0.75
+        pupil_radius = rect.width * 0.15
+        angular_width = pi * 0.63
+        draw_width = round(rect.width * 0.04)
+        num_lines = 5
+        line_length = rect.width * 0.15
+
+        pg.draw.arc(surf, (0, 0, 0), pg.Rect(
+            rect.left + (rect.width - eye_box_width)/2, rect.centery - pupil_radius,
+            eye_box_width, rect.height/2 + pupil_radius
+        ), pi/2-angular_width/2, pi/2+angular_width/2, width=draw_width)
+
+        pg.draw.arc(surf, (0, 0, 0), pg.Rect(
+            rect.left + (rect.width - eye_box_width)/2, rect.top,
+            eye_box_width, rect.height/2 + pupil_radius
+        ), -pi/2-angular_width/2, -pi/2+angular_width/2, width=draw_width)
+
+        pg.draw.circle(surf, (0, 0, 0), rect.center, pupil_radius)
+
+        for i in range(num_lines):
+            theta = 90 / num_lines * (i - num_lines//2)
+            offset = self.orientation.rotate(round(theta))
+            start = V2(*rect.center) + offset * pupil_radius * 1.4
+            end = start + offset * line_length
+            pg.draw.line(surf, (0, 0, 0), tuple(start), tuple(end), width=round(draw_width/2))
 
 
 
-ENTITY_TYPES = [Barrel, Barrier, Boostpad, ResourceExtractor, ResourceTile, Target, Piston]
+ENTITY_TYPES = [Barrel, Barrier, Boostpad, ResourceExtractor, ResourceTile, Target, Piston, Sensor]
