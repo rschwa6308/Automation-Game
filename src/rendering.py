@@ -138,16 +138,28 @@ def render_board(
 
 class SnapshotProvider:
     """provides a clean interface for obtaining snapshots of the rendered board"""
+    # TODO: decide if we like showing the selected_entity highlight in the snapshot or not
     zoom_level = 0.5    # arbitrary choice
 
-    def __init__(self, level):
-        self.level = level
-    
+    def __init__(self, level_runner):
+        self.level_runner = level_runner
+
     def take_snapshot(self, entity, dims) -> pg.Surface:
         surf = pg.Surface(dims)
-        pos = self.level.board.find(entity)
+        pos = self.level_runner.level.board.find(entity)
         if pos is None:
             raise ValueError("desired entity not found while taking snapshot")
         cam = Camera(pos + V2(0.5, 0.5), self.zoom_level)
-        render_board(self.level.board, surf, cam)
+        render_board(self.level_runner.level.board, surf, cam, selected_entity=self.level_runner.selected_entity)
+        return surf
+    
+    def take_snapshot_at_mouse(self, dims):
+        surf = pg.Surface(dims)
+        pos = self.level_runner.camera.get_world_coords(
+            self.level_runner.mouse_pos,
+            self.level_runner.screen_width,
+            self.level_runner.screen_height,
+        )
+        cam = Camera(pos, self.zoom_level)
+        render_board(self.level_runner.level.board, surf, cam, selected_entity=self.level_runner.selected_entity)
         return surf

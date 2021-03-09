@@ -65,7 +65,7 @@ class LevelRunner:
         self.widget_rects: Sequence[Tuple[pg.Rect, Widget]]         = []    # store widget rects for easier collision
         self.shelf_icon_rects: Sequence[Tuple[pg.Rect, str]]        = []    # store shelf icon rects for easier collision
 
-        self.snapshot_provider = SnapshotProvider(self.level)
+        self.snapshot_provider = SnapshotProvider(self)
 
     def run(self):
         """run the level in a resizable window at `TARGET_FPS`"""
@@ -364,8 +364,12 @@ class LevelRunner:
             self.camera.pan_abs(-disp)
             self.viewport_changed = True
         
-        if self.held_entity is not None or self.wiring_widget is not None:
+        if self.held_entity is not None:
             self.reblit_needed = True
+        
+        if self.wiring_widget is not None:
+            self.reblit_needed = True
+            self.editor_changed = True
 
     def draw_level(self):
         """draw the level onto `viewport_surf` using `self.step_progress` for animation state"""

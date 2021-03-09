@@ -154,7 +154,7 @@ class WireEditor:
         # draw background
         pg.draw.rect(surf, (255, 255, 255), self.snapshot_rect)
 
-        if self.get_value()[0] is None:
+        if self.get_value()[0] is None and not self.in_use:
             size = FONT_SIZE * 0.6
             render_text_centered(
                 "not", (63, 63, 63), surf,
@@ -165,16 +165,12 @@ class WireEditor:
                 (self.snapshot_rect.centerx, self.snapshot_rect.centery + size/2), size
             )
         else:
-            # draw snapshot
-            if snapshot_provider is None or \
-            (snap := snapshot_provider.take_snapshot(self.get_value()[0], self.snapshot_rect.size)) is None:
-                render_text_centered(
-                    str(self.get_value()[0]), (0, 0, 0), surf,
-                    self.snapshot_rect.center, 6
-                )
+            if self.in_use:
+                snap = snapshot_provider.take_snapshot_at_mouse(self.snapshot_rect.size)
             else:
-                surf.blit(snap, self.snapshot_rect)
-        
+                snap = snapshot_provider.take_snapshot(self.get_value()[0], self.snapshot_rect.size)
+            surf.blit(snap, self.snapshot_rect)
+
         # draw border
         color = HIGHLIGHT_COLOR if self.in_use else (0, 0, 0)
         pg.draw.rect(surf, color, self.snapshot_rect, 2)
