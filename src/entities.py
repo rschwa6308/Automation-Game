@@ -9,7 +9,7 @@ import pygame.freetype
 import pygame.gfxdraw
 from pygame.transform import threshold
 
-from helpers import V2, Direction, draw_aacircle, draw_chevron, draw_rectangle, render_text_centered, interpolate_colors, sgn
+from helpers import V2, Direction, all_subclasses, draw_aacircle, draw_chevron, draw_rectangle, render_text_centered, interpolate_colors, sgn
 from colors import Color
 from widgets import DirectionEditor, SmallIntEditor, Spacing, Widget, WireEditor
 from constants import *
@@ -26,27 +26,13 @@ class Entity:
     orients: bool = False
     stops: bool = False
     merges: bool = False
+    has_ports: bool = False
     draw_precedence: int = 0
 
     def __init__(self, locked: bool):
         self.locked = locked
         self.animations = []
-        self.wirings = []
         # self.garbage = False    # flag for deletion on next step
-    
-    def available_inputs(self) -> Collection[int]:
-        res = []
-        for i, (inp, e, j) in enumerate(self.wirings):
-            if inp and e is None:
-                res.append(i)
-        return res
-
-    def available_outputs(self) -> Collection[int]:
-        res = []
-        for i, (inp, e, j) in enumerate(self.wirings):
-            if not inp and e is None:
-                res.append(i)
-        return res
     
     @abstractmethod
     def draw_onto(
@@ -230,10 +216,10 @@ class ResourceExtractor(Block):
         self.phase = 1
 
         self.widgets = [
-            DirectionEditor(self, "orientation"),
+            DirectionEditor(self, "localvar:orientation", "orientation"),
             # Spacing(20.0),
-            SmallIntEditor(self, "period", (1, 5)),
-            SmallIntEditor(self, "phase", (1, self.period)),
+            SmallIntEditor(self, "localvar:period", (1, 5), "period"),
+            SmallIntEditor(self, "localvar:phase", (1, "localvar:period"), "phase"),
         ]
     
     def draw_onto_base(self, surf: pg.Surface, rect: pg.Rect, edit_mode: bool, step_progress: float = 0.0, neighborhood = (([],) * 5,) * 5):
@@ -265,7 +251,7 @@ class Boostpad(Carpet):
         self.orientation = orientation
 
         self.widgets = [
-            DirectionEditor(self, "orientation")
+            DirectionEditor(self, "localvar:orientation", "orientation")
         ]
     
     def draw_onto_base(self, surf: pg.Surface, rect: pg.Rect, edit_mode: bool, step_progress: float = 0.0, neighborhood = (([],) * 5,) * 5):
@@ -307,7 +293,70 @@ class Target(Carpet):
 
 
 
-class Piston(Block):
+class Wirable(Entity):
+    has_ports = True
+
+    def __init__(self, locked: bool):
+        super().__init__(locked)
+        self.wirings = []
+        self.port_states = []
+
+    def available_inputs(self) -> Collection[int]:
+        res = []
+        for i, (inp, e, j) in enumerate(self.wirings):
+            if inp and e is None:
+                res.append(i)
+        return res
+
+    def available_outputs(self) -> Collection[int]:
+        res = []
+        for i, (inp, e, j) in enumerate(self.wirings):
+            if not inp and e is None:
+                res.append(i)
+        return res
+    
+    def clear_ports(self) -> None:
+        self.port_states =  [None for _ in self.port_states]
+    
+    def resolve_port(self, i) -> bool:
+        """resolves the given port by recursing backwards on inputs, and by calling `self.resolve_output_port` on outputs"""
+        # use cached value (requires clearing before every round)
+        if self.port_states[i] not in (None, "visited"):
+            return self.port_states[i]
+        
+        # check to see if node already visited - indicates a cycle in the wiring graph
+        if self.port_states[i] == "visited":
+            print("CYCLE DETECTED IN WIRING GRAPH")
+            res = False                         # for now, just set port to False
+        else:
+            self.port_states[i] = "visited"
+            
+            inp, other, j = self.wirings[i]
+            if other is None:
+                res = False                     # no connection = LOW = False
+            elif inp:
+                res = other.resolve_port(j)     # the connected entity's output
+            else:
+                res = self.resolve_output_port(i)
+
+        self.port_states[i] = res               # cache result
+        return res
+
+    @abstractmethod
+    def resolve_output_port(self, i) -> bool:
+        """custom functionality for resolving output port values (e.g. logic gate logic goes here)"""
+        if self.wirings[i][0]:
+            raise ValueError("resolve_output_port cannot be called on an input port")
+        
+        return None
+    
+    def on_ports_resolved(self) -> None:
+        """called immediately after all ports have been resolved; used for updating internal state"""
+        pass
+
+
+
+class Piston(Block, Wirable):
     name = "Piston"
     ascii_str = "P"
     orients = True
@@ -320,19 +369,29 @@ class Piston(Block):
         if orientation is Direction.NONE:
             raise ValueError("Boostpad orientation cannot be `Direction.NONE`")
         self.orientation = orientation
-        self.activated = True       # FOR TESTING
+        self.activated = None
         
         # format is [(is_input, other_entity, other_entity's wire_index)]
         self.wirings: Sequence[Sequence[bool, Entity, int]] = [
             [True, None, None],
             [False, None, None]
         ]
+        self.port_states = [None for _ in self.wirings]
 
         self.widgets = [
-            DirectionEditor(self, "orientation"),
+            DirectionEditor(self, "localvar:orientation", "orientation"),
             WireEditor(self, 0, "test in"),
             WireEditor(self, 1, "test out"),
         ]
+    
+    def resolve_output_port(self, i) -> bool:
+        super().resolve_output_port(i)
+        # if self.activated is None:
+        #     raise RuntimeError("cannot read output value on a sensor that has not yet obtained a reading (check engine execution order)")
+        return self.resolve_port(0)     # for now, pistons "repeat" their input value
+    
+    def on_ports_resolved(self):
+        self.activated = self.port_states[0]    # set activation to input port state
 
     def draw_onto_base(self, surf: pg.Surface, rect: pg.Rect, edit_mode: bool, step_progress: float = 0.0, neighborhood = (([],) * 5,) * 5):
         s = rect.width
@@ -380,27 +439,37 @@ class Piston(Block):
         surf.blit(temp, rect.inflate(s * 2, s * 2))
 
 
-class Sensor(Block):
+class Sensor(Block, Wirable):
     name = "Piston"
     ascii_str = "S"
     orients = True
+
+    target_entity_type = Barrel
 
     def __init__(self, orientation: Direction = Direction.NORTH, locked: bool = False):
         super().__init__(locked)
         if orientation is Direction.NONE:
             raise ValueError("Boostpad orientation cannot be `Direction.NONE`")
         self.orientation = orientation
-        self.activated = True       # FOR TESTING
+        self.activated = None
         
         # format is [(is_input, other_entity, other_entity's wire_index)]
         self.wirings: Sequence[Sequence[bool, Entity, int]] = [
             [False, None, None]
         ]
+        self.port_states = [None for _ in self.wirings]
 
         self.widgets = [
-            DirectionEditor(self, "orientation"),
+            DirectionEditor(self, "localvar:orientation", "orientation"),
             WireEditor(self, 0, "test out"),
         ]
+    
+    def resolve_output_port(self, i) -> bool:
+        super().resolve_output_port(i)
+        if self.activated is None:
+            raise RuntimeError("cannot read output value on a sensor that has not yet obtained a reading (check engine execution order)")
+        return self.activated
+
     
     def draw_onto_base(self, surf: pg.Surface, rect: pg.Rect, edit_mode: bool, step_progress: float = 0.0, neighborhood = (([],) * 5,) * 5):
         eye_box_width = rect.width * 0.75
@@ -410,6 +479,7 @@ class Sensor(Block):
         num_lines = 5
         line_length = rect.width * 0.15
 
+        # draw edges of eye
         pg.draw.arc(surf, (0, 0, 0), pg.Rect(
             rect.left + (rect.width - eye_box_width)/2, rect.centery - pupil_radius,
             eye_box_width, rect.height/2 + pupil_radius
@@ -420,6 +490,7 @@ class Sensor(Block):
             eye_box_width, rect.height/2 + pupil_radius
         ), -pi/2-angular_width/2, -pi/2+angular_width/2, width=draw_width)
 
+        # draw pupil
         pg.draw.circle(surf, (0, 0, 0), rect.center, pupil_radius)
 
         for i in range(num_lines):
@@ -430,5 +501,14 @@ class Sensor(Block):
             pg.draw.line(surf, (0, 0, 0), tuple(start), tuple(end), width=round(draw_width/2))
 
 
+# TODO:
+# - signal splitters
+# - NOT gates
+# - AND gates
+# - OR gates
+
+
 
 ENTITY_TYPES = [Barrel, Barrier, Boostpad, ResourceExtractor, ResourceTile, Target, Piston, Sensor]
+# ENTITY_TYPES = all_subclasses(Entity)
+# print(ENTITY_TYPES)

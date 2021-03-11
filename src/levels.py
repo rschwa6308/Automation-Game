@@ -1,4 +1,5 @@
 from random import choice, random, shuffle
+from copy import copy
 
 from engine import Board, Level, Palette
 from entities import *
@@ -41,22 +42,41 @@ test_level2 = Level(test_board2, Palette({
 
 
 
-def random_flood(n):
-    """starting at the origin, randomly flood a total of `n` cells (returns list of locations)"""
-    locs = set([(0, 0)])
-    while True:
-        if len(locs) >= n:
-            return locs
+# def random_flood(n, center=(0, 0)):
+#     """starting at the origin, randomly flood a total of `n` cells (returns list of locations)"""
+#     locs = set([center])
+#     while True:
+#         if len(locs) >= n:
+#             return locs
+#         temp = list(locs)
+#         shuffle(temp)
+#         for l in temp:
+#             d = choice(Direction.nonzero())
+#             locs.add((l[0] + d.x, l[1] + d.y))
+
+
+
+def random_flood(center, n, item):
+    """
+    starting at the center, randomly flood a total of `n` cells with copies of the given item;
+    returns dict in Board constructor format
+    """
+    locs = set([center])
+    while len(locs) < n:
+
         temp = list(locs)
         shuffle(temp)
         for l in temp:
             d = choice(Direction.nonzero())
             locs.add((l[0] + d.x, l[1] + d.y))
+    
+    return {loc: [copy(item)] for loc in locs}
 
 
 resource_test = Level(Board({
-    loc: [ResourceTile(Color.BLUE)]
-    for loc in random_flood(30)
+    **random_flood((0, 0), 30, ResourceTile(Color.BLUE))
+    # loc: [ResourceTile(Color.BLUE)]
+    # for loc in random_flood(30)
     # (0, 0): [ResourceTile(Color.BLUE)],
     # (0, 1): [ResourceTile(Color.BLUE)],
     # (1, 0): [ResourceTile(Color.BLUE)],
@@ -97,3 +117,21 @@ resource_test = Level(Board({
 # # print(cells)
 
 # random_level = Level(Board(cells), Palette())
+
+
+test_level3 = Level(
+    Board({
+        **random_flood((0, 0), 12, ResourceTile(Color.BLUE)),
+        **random_flood((0, 14), 10, ResourceTile(Color.RED)),
+        (12, 7): [Target(Color.VIOLET, count=10)],
+        (12, 4): [Target(Color.BLUE, count=10)],
+        (12, 10): [Target(Color.RED, count=10)],
+    }),
+    Palette({
+        ResourceExtractor: 2,
+        Boostpad: 1,
+        Sensor: 1,
+        Piston: 2
+    })
+)
+

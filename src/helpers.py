@@ -182,6 +182,10 @@ def interpolate_colors(a, b, bias):
         int(a[1] * (1 - bias) + b[1] * bias),
         int(a[2] * (1 - bias) + b[2] * bias),
     )
+
+def all_subclasses(cls):
+    return set(cls.__subclasses__()).union(
+        [s for c in cls.__subclasses__() for s in all_subclasses(c)])
 # ------------ #
 
 

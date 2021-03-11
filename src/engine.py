@@ -71,8 +71,10 @@ class Board:
                 for e in cell:
                     yield V2(*pos), e
         else:
-            for pos, e in self.type_locs[filter_type]:
-                yield V2(*pos), e
+            for e_type in self.type_locs:
+                if issubclass(e_type, filter_type):
+                    for pos, e in self.type_locs[e_type]:
+                        yield V2(*pos), e
 
     def insert(self, x, y, *entities):
         pos = (x, y)
@@ -182,9 +184,9 @@ class Level:
         self.won = False
 
         self.substeps = [
-            [self.apply_resource_extractors, self.apply_translations],
-            [self.apply_merges, self.apply_pistons],
-            [self.apply_merges, self.apply_rotations, self.apply_targets],
+            [self.reset_wiring_network, self.apply_resource_extractors, self.apply_translations],
+            [self.apply_merges, self.apply_sensors, self.resolve_wiring_network, self.apply_pistons],
+            [self.apply_merges, self.apply_rotations, self.apply_targets, self.check_won],
         ]
         self.current_substep = 0
     
@@ -242,6 +244,13 @@ class Level:
                 self.board.remove(*pos, *mergable)
                 self.board.insert(*pos, res)
     
+    def apply_sensors(self):
+        for pos, e in list(self.board.get_all(filter_type=Sensor)):
+            target_cell = self.board.get(*(pos + e.orientation))
+            e.activated = any(isinstance(d, e.target_entity_type) for d in target_cell)
+            assert(e.activated is not None)
+
+
     def apply_pistons(self):        
         for pos, e in list(self.board.get_all(filter_type=Piston)):
             if e.activated:
@@ -269,6 +278,28 @@ class Level:
                     if d.color is e.color:
                         e.count -= 1
     
+    def reset_wiring_network(self):
+        for _, e in list(self.board.get_all(filter_type=Wirable)):
+            e.clear_ports()
+
+    def resolve_wiring_network(self):       
+        for _, e in list(self.board.get_all(filter_type=Wirable)):
+            for i in range(len(e.port_states)):
+                e.resolve_port(i)
+        
+        for _, e in list(self.board.get_all(filter_type=Wirable)):
+            e.on_ports_resolved()
+        
+        # sanity checks (TEMPORARY)
+        for _, e in list(self.board.get_all(filter_type=Wirable)):
+            assert(None not in e.port_states)
+
+        for _, e in list(self.board.get_all(filter_type=Wirable)):
+            for i in range(len(e.port_states)):
+                _, other, j = e.wirings[i]
+                if other is None: continue
+                assert(e.port_states[i] == other.port_states[j])
+
     def check_won(self):
         self.won = all(e.count == 0 for _, e in self.board.get_all(filter_type=Target))
 
