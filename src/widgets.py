@@ -1,5 +1,5 @@
 # --- UI-Widgets for the Editor Panel --- #
-from typing import Tuple
+from typing import Tuple, Union
 import pygame as pg
 
 from helpers import V2, Direction, clamp, draw_chevron, draw_rectangle, render_text_centered, render_text_left_justified
@@ -24,6 +24,7 @@ class Widget:
         return False
 
 
+
 class Spacing(Widget):
     def __init__(self, aspect_ratio) -> None:
         super().__init__()
@@ -35,18 +36,31 @@ class AttrEditor(Widget):
         self.entity = entity
         self.attr = attr
     
+    def get_attr(self, attr_str):
+        return self.entity.__getattribute__(self.parse_attr_string(attr_str))
+    
     def get_value(self):
-        return self.entity.__getattribute__(self.attr)
+        return self.get_attr(self.attr)
     
     def set_value(self, value):
-        self.entity.__setattr__(self.attr, value)
+        self.entity.__setattr__(self.parse_attr_string(self.attr), value)
+    
+    @staticmethod
+    def parse_attr_string(string: str):
+        prefix = "localvar:"
+        if not string.startswith(prefix):
+            raise ValueError(f"invalid attr string: {string}")
+        
+        return string[len(prefix):]
     
 
 class DirectionEditor(AttrEditor):
     aspect_ratio = 1.0
 
-    def __init__(self, entity, attr: str):
+    def __init__(self, entity, attr: str, label: str):
         super().__init__(entity, attr)
+
+        self.label = label
         self.hitboxes = []
 
     def draw_onto(self, surf: pg.Surface, rect: pg.Rect, **kwargs):
@@ -67,7 +81,7 @@ class DirectionEditor(AttrEditor):
             for d in Direction
             if d is not Direction.NONE
         ]
-        render_text_centered(self.attr, (0, 0, 0), surf, V2(rect.centerx, rect.bottom - s * 0.18), FONT_SIZE)
+        render_text_centered(self.label, (0, 0, 0), surf, V2(rect.centerx, rect.bottom - s * 0.18), FONT_SIZE)
     
     def handle_click(self, pos: V2):
         for d, hitbox in self.hitboxes:
@@ -81,23 +95,34 @@ class DirectionEditor(AttrEditor):
 class SmallIntEditor(AttrEditor):
     aspect_ratio = 6.0
 
-    def __init__(self, entity, attr: str, limits: Tuple[int, int]):
+    def __init__(self, entity, attr: str, limits_def: Tuple[Union[int, str], Union[int, str]], label: str):
         super().__init__(entity, attr)
-        self.limits = limits
+        self.limits_def = limits_def
+
+        self.label = label
         self.hitboxes = []
 
         # ensure value is within limits
-        self.set_value(clamp(self.get_value(), *limits))
+        self.set_value(clamp(self.get_value(), *self.get_limits()))
+    
+    def get_limits(self) -> Tuple[int, int]:
+        # either return static int or read the localvar attribute value
+        low, high = self.limits_def
+        return (
+            low if isinstance(low, int) else self.get_attr(low),
+            high if isinstance(high, int) else self.get_attr(high),
+        )
 
     def draw_onto(self, surf: pg.Surface, rect: pg.Rect, **kwargs):
         super().draw_onto(surf, rect)
-        render_text_left_justified(self.attr, (0, 0, 0), surf, V2(rect.left + 6, rect.centery), FONT_SIZE)
+        render_text_left_justified(self.label, (0, 0, 0), surf, V2(rect.left + 6, rect.centery), FONT_SIZE)
         # TODO: draw number selector boxes
         box_width = int(rect.height * 0.75)
         box_height = int(rect.height * 0.75)
         box_thickness = 2
         self.hitboxes.clear()
-        for i, n in enumerate(range(self.limits[0], self.limits[1] + 1)):   # inclusive
+        low, high = self.get_limits()
+        for i, n in enumerate(range(low, high + 1)):   # inclusive
             box = pg.Rect(
                 rect.left + rect.width * 0.4 + (box_width - box_thickness // 2) * i,
                 rect.centery - box_height / 2,
@@ -121,10 +146,10 @@ class SmallIntEditor(AttrEditor):
 class WireEditor:
     aspect_ratio = 2.0
 
-    def __init__(self, entity, wire_index: int, title: str):
+    def __init__(self, entity, wire_index: int, label: str):
         self.entity = entity
         self.wire_index = wire_index
-        self.title = title
+        self.label = label
         self.snapshot_rect = None
         self.is_input = entity.wirings[wire_index][0]   # tracks if wire is an input or an output
         self.in_use = False
@@ -142,7 +167,7 @@ class WireEditor:
         self.entity.wirings[self.wire_index][2] = i
     
     def draw_onto(self, surf: pg.Surface, rect: pg.Rect, snapshot_provider=None) -> None:
-        render_text_left_justified(self.title, (0, 0, 0), surf, V2(rect.left + 6, rect.centery), FONT_SIZE)
+        render_text_left_justified(self.label, (0, 0, 0), surf, V2(rect.left + 6, rect.centery), FONT_SIZE)
 
         w = rect.width * 0.4
         h = rect.height * 0.8

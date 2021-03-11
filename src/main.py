@@ -3,11 +3,11 @@ from typing import Union, Type, Sequence, Tuple, Optional
 from math import floor, ceil
 import pygame as pg
 
-from entities import Entity
+from entities import Entity, Wirable
 from widgets import Widget, WireEditor
 from engine import Board, Level
 from rendering import Camera, DEFAULT_CELL_SIZE, SnapshotProvider, render_board
-from levels import test_level, test_level2, resource_test
+from levels import test_level, test_level2, resource_test, test_level3
 from helpers import V2, draw_aapolygon, draw_rect_alpha, render_text_centered, clamp, wrap_text
 from constants import *
 
@@ -119,8 +119,8 @@ class LevelRunner:
                     self.substep_progress -= 1.0
                     self.level.substep()
                     if self.level.won:
-                        pass
-                        # print("good job")
+                        # pass
+                        print("YOU WON!!!")
                         # TODO: show congrats screen or something
                 self.viewport_changed = True
 
@@ -440,11 +440,12 @@ class LevelRunner:
             return (V2(*self.viewport_surf.get_rect().center) + (pos - self.camera.center) * s).floor()
 
         # draw wiring while moving entity
-        wire_width = round(DEFAULT_GRID_LINE_WIDTH * self.camera.zoom_level ** 0.5)
-        for _, other, _ in self.held_entity.wirings:
-            if other is not None:
-                other_pos = grid_to_px(self.level.board.find(other) + V2(0.5, 0.5))
-                pg.draw.line(self.screen, WIRE_COLOR, tuple(other_pos), rect.center, wire_width)
+        if self.held_entity.has_ports:
+            wire_width = round(DEFAULT_GRID_LINE_WIDTH * self.camera.zoom_level ** 0.5)
+            for _, other, _ in self.held_entity.wirings:
+                if other is not None:
+                    other_pos = grid_to_px(self.level.board.find(other) + V2(0.5, 0.5))
+                    pg.draw.line(self.screen, WIRE_COLOR_OFF, tuple(other_pos), rect.center, wire_width)
 
 
     def draw_wiring_indicator(self):
@@ -457,7 +458,7 @@ class LevelRunner:
 
         start = grid_to_px(self.level.board.find(self.selected_entity) + V2(0.5, 0.5))
         wire_width = round(DEFAULT_GRID_LINE_WIDTH * self.camera.zoom_level ** 0.5)
-        pg.draw.line(self.screen, WIRE_COLOR, tuple(start), tuple(self.mouse_pos), wire_width)
+        pg.draw.line(self.screen, WIRE_COLOR_OFF, tuple(start), tuple(self.mouse_pos), wire_width)
 
 
     def select_entity(self, entity):
@@ -552,7 +553,11 @@ class LevelRunner:
 
         successful = False
 
-        if e is None or e is self.wiring_widget.entity: # cannot connect to self
+        if any([
+            e is None,
+            e is self.wiring_widget.entity,             # cannot connect to self
+            not isinstance(e, Wirable)
+        ]):
             # clear connection
             self.wiring_widget.set_value(None, None)
             successful = True

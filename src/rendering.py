@@ -2,7 +2,7 @@ from math import ceil, floor
 import pygame as pg
 
 from engine import Board
-from entities import Entity
+from entities import Entity, Wirable
 from helpers import V2, clamp
 from constants import *
 
@@ -123,9 +123,11 @@ def render_board(
             width=grid_line_width
         )
     
+    # draw wires
+    # TODO: make wire appearance change when ON or OFF
     if wiring_visible:
         wire_width = grid_line_width        # same as grid width
-        for pos, e in board.get_all():
+        for pos, e in board.get_all(filter_type=Wirable):
             for _, d, i in e.wirings:
                 if d is None: continue
                 d_pos = board.find(d)
@@ -133,7 +135,8 @@ def render_board(
                     continue
                     # raise ValueError("unable to find desired entity while drawing wiring")
                 start, end = grid_to_px(pos + V2(0.5, 0.5)), grid_to_px(d_pos + V2(0.5, 0.5))
-                pg.draw.line(surf, WIRE_COLOR, tuple(start), tuple(end), wire_width)
+                color = WIRE_COLOR_ON if e.port_states[i] else WIRE_COLOR_OFF
+                pg.draw.line(surf, color, tuple(start), tuple(end), wire_width)
 
 
 class SnapshotProvider:

@@ -35,7 +35,8 @@ HIGHLIGHT_COLOR         = (255, 255, 0)
 
 VIEWPORT_BG_COLOR       = (255, 255, 255)
 GRID_LINE_COLOR         = (0, 0, 0)
-WIRE_COLOR              = (255, 0, 0)
+WIRE_COLOR_OFF          = (127, 0, 0)
+WIRE_COLOR_ON           = (255, 0, 0)
 
 DEFAULT_CELL_SIZE           = 64
 DEFAULT_GRID_LINE_WIDTH     = 2
@@ -48,4 +49,4 @@ SHELF_ANIMATION_SPEED   = 15    # pixels per frame
 EDITOR_ANIMATION_SPEED  = 30    # pixels per frame
 
 LEVEL_SUBSTEP_INTERVAL = 500    # milliseconds
-FAST_FORWARD_FACTOR = 3
+FAST_FORWARD_FACTOR = 5
