@@ -7,7 +7,7 @@ from entities import Entity, Wirable
 from widgets import Widget, WireEditor
 from engine import Board, Level
 from rendering import Camera, DEFAULT_CELL_SIZE, SnapshotProvider, render_board
-from levels import test_level, test_level2, resource_test, test_level3
+from levels import test_level, test_level2, resource_test, test_level3, minimal_level
 from helpers import V2, draw_aapolygon, draw_rect_alpha, render_text_centered, clamp, wrap_text
 from constants import *
 
@@ -40,6 +40,7 @@ class LevelRunner:
 
         self.shelf_state = "open"       # "open", "closed", "opening", or "closing"
         self.editor_state = "closed"    # "open", "closed", "opening", or "closing"
+        self.editor_state_queue = []
         self.substep_progress = 0.0        # float in [0, 1) denoting fraction of current step completed (for animation)
 
         # initialize camera to contain `level.board` (with some margin)
@@ -58,6 +59,8 @@ class LevelRunner:
         self.hold_point: V2 = V2(0, 0)  # in [0, 1]^2
 
         self.selected_entity: Union[Entity, None] = None
+        self.editing_entity: Union[Entity, None] = None
+        # self.selected_entity_queue = []
 
         self.pressed_icon: Optional[str] = None
 
@@ -111,6 +114,11 @@ class LevelRunner:
             self.handle_shelf_animation()
             self.handle_editor_animation()
 
+            # switch editing entity only when panel is closed or opening
+            if self.editor_state in ("closed", "opening"):
+                self.editing_entity = self.selected_entity
+                self.editor_changed = True
+            
             # handle level execution
             if not self.edit_mode and not self.paused:
                 interval = LEVEL_SUBSTEP_INTERVAL / (FAST_FORWARD_FACTOR if self.fast_forward else 1)
@@ -123,6 +131,7 @@ class LevelRunner:
                         print("YOU WON!!!")
                         # TODO: show congrats screen or something
                 self.viewport_changed = True
+                self.editor_changed = True      # needed for updating snapshots
 
             # handle output
             if self.window_size_changed:
@@ -204,30 +213,42 @@ class LevelRunner:
                 self.editor_width_onscreen = EDITOR_WIDTH
                 self.editor_state = "open"
             self.reblit_needed = True
+        elif self.editor_state_queue:
+            self.editor_state = self.editor_state_queue.pop(0)
 
     def toggle_playing(self):
         # toggle shelf state (initiates animation (if not already in progress))
         if self.shelf_state in ("open", "closed"):
             if self.edit_mode and self.held_entity is None:
-                self.deselect_entity()
+                # self.deselect_entity()    
                 self.shelf_state = "closing"
                 self.edit_mode = False
                 self.paused = False
                 self.level.save_state()         # freeze current board/palette state
                 self.viewport_changed = True
+                self.editor_changed = True
             elif not self.edit_mode:
                 self.shelf_state = "opening"
                 self.level.load_saved_state()   # revert board and palette
+                # references are now stale! need to update
+                self.update_stale_references()
                 self.edit_mode = True
                 self.viewport_changed = True
+                self.editor_changed = True
         self.substep_progress = 0.0
+    
+    def update_stale_references(self):
+        if self.selected_entity is not None:
+            self.selected_entity = self.level.entity_copy_memo[id(self.selected_entity)]
+        if self.editing_entity is not None:
+            self.editing_entity = self.level.entity_copy_memo[id(self.editing_entity)]
 
     def handle_keydown(self, key):
         if key == pg.K_ESCAPE:
             self.running = False
         elif key == pg.K_SPACE:
             self.toggle_playing()
-        elif key == pg.K_r:
+        elif key == pg.K_r and self.edit_mode:
             # rotate held/selected entity
             e = self.held_entity if self.held_entity else self.selected_entity
             if e and e.orients:
@@ -268,8 +289,8 @@ class LevelRunner:
                     self.pressed_icon = icon
                     self.reblit_needed = True
             
-            if not self.edit_mode:
-                return
+            # if not self.edit_mode:
+            #     return
 
             entity_clicked = None
             clicked_wire_widget = False
@@ -281,24 +302,27 @@ class LevelRunner:
                 for rect, e_type in self.palette_rects:
                     if rect.collidepoint(*adjusted_pos):
                         # pick up entity (from palette)
-                        self.held_entity = e_type()  # create new entity
+                        new = e_type()  # create new entity
+                        self.held_entity = new
                         self.hold_point = V2(0.5, 0.5)
                         self.level.palette.remove(self.held_entity)
                         self.deselect_entity()
+                        self.select_entity(new)
                         self.shelf_changed = True
                         break
             elif self.mouse_pos.x >= self.screen_width - self.editor_width_onscreen:
                 # cursor is over editor
-                adjusted_pos = self.mouse_pos - V2(self.screen_width - self.editor_width_onscreen, 0)
-                for hitbox, widget in self.widget_rects:
-                    if hitbox.collidepoint(*adjusted_pos):
-                        clicked_wire_widget = widget.handle_click(adjusted_pos)
-                        if clicked_wire_widget:
-                            self.finish_wiring(None)    # deselect previously selected wire widget
-                            self.wiring_widget = widget
-                        self.editor_changed = True      # just redraw every time (easier)
-                        self.viewport_changed = True    # ^^^
-                        break
+                if self.edit_mode:      # cannot interact with editor if not in edit mode
+                    adjusted_pos = self.mouse_pos - V2(self.screen_width - self.editor_width_onscreen, 0)
+                    for hitbox, widget in self.widget_rects:
+                        if hitbox.collidepoint(*adjusted_pos):
+                            clicked_wire_widget = widget.handle_click(adjusted_pos)
+                            if clicked_wire_widget:
+                                self.finish_wiring(None)    # deselect previously selected wire widget
+                                self.wiring_widget = widget
+                            self.editor_changed = True      # just redraw every time (easier)
+                            self.viewport_changed = True    # ^^^
+                            break
             else:
                 # cursor is over board
                 pos_float = self.camera.get_world_coords(self.mouse_pos, self.screen_width, self.screen_height)
@@ -313,10 +337,13 @@ class LevelRunner:
                         self.deselect_entity()
                     if entity_clicked is not None and not entity_clicked.locked:
                         # pick up entity (from board)
-                        self.held_entity = entity_clicked
-                        self.hold_point = pos_float.fmod(1)
-                        self.level.board.remove(*pos, self.held_entity)
-                        self.viewport_changed = True
+                        if self.edit_mode:
+                            self.held_entity = entity_clicked
+                            self.hold_point = pos_float.fmod(1)
+                            self.level.board.remove(*pos, self.held_entity)
+                            self.viewport_changed = True
+                        if entity_clicked.editable:
+                            self.select_entity(entity_clicked)
                     else:
                         self.deselect_entity()
 
@@ -354,8 +381,10 @@ class LevelRunner:
                     # drop entity
                     self.level.board.insert(*pos, self.held_entity)
                     # select entity that was just dropped
-                    self.select_entity(self.held_entity)
+                    if self.held_entity.editable:
+                        self.select_entity(self.held_entity)
                     self.held_entity = None
+                    self.viewport_changed = True
 
     def handle_mousemotion(self, rel):
         # pan camera if right click is held
@@ -399,14 +428,15 @@ class LevelRunner:
     def draw_editor(self):
         self.editor_surf.fill(EDITOR_BG_COLOR)
 
-        if self.editor_state == "closed" or self.selected_entity is None:
+        if self.editor_state == "closed" or self.editing_entity is None:
             return      # NoOp
 
         y_pos = EDITOR_WIDGET_SPACING
 
         # render header
-        header_font_height = 26
-        for word in wrap_text(self.selected_entity.name, 12):
+        header_font_height = EDITOR_WIDTH / 8
+        header_text = self.editing_entity.name
+        for word in wrap_text(header_text, 12):
             render_text_centered(
                 word,
                 (0, 0, 0),
@@ -416,11 +446,24 @@ class LevelRunner:
                 bold=True
             )
             y_pos += header_font_height
+        
+        # render read-only indicator
+        read_only_indicator_font_height = header_font_height / 2
+        if not self.edit_mode:
+            render_text_centered(
+                "(read-only)",
+                (0, 0, 0),
+                self.editor_surf,
+                (EDITOR_WIDTH // 2, y_pos + header_font_height // 2),
+                read_only_indicator_font_height,
+                bold=True
+            )
+        y_pos += read_only_indicator_font_height    # leave space regardless
 
         # draw widgets
         y_pos += EDITOR_WIDGET_SPACING
         self.widget_rects.clear()
-        for w in self.selected_entity.widgets:
+        for w in self.editing_entity.widgets:
             h = EDITOR_WIDTH / w.aspect_ratio
             rect = pg.Rect(0, y_pos, EDITOR_WIDTH, h)
             w.draw_onto(self.editor_surf, rect, snapshot_provider=self.snapshot_provider)
@@ -447,7 +490,6 @@ class LevelRunner:
                     other_pos = grid_to_px(self.level.board.find(other) + V2(0.5, 0.5))
                     pg.draw.line(self.screen, WIRE_COLOR_OFF, tuple(other_pos), rect.center, wire_width)
 
-
     def draw_wiring_indicator(self):
         if self.wiring_widget is None: return
 
@@ -456,20 +498,19 @@ class LevelRunner:
         def grid_to_px(pos: V2) -> V2:
             return (V2(*self.viewport_surf.get_rect().center) + (pos - self.camera.center) * s).floor()
 
-        start = grid_to_px(self.level.board.find(self.selected_entity) + V2(0.5, 0.5))
+        start = grid_to_px(self.level.board.find(self.editing_entity) + V2(0.5, 0.5))
         wire_width = round(DEFAULT_GRID_LINE_WIDTH * self.camera.zoom_level ** 0.5)
         pg.draw.line(self.screen, WIRE_COLOR_OFF, tuple(start), tuple(self.mouse_pos), wire_width)
 
-
     def select_entity(self, entity):
         self.selected_entity = entity
-        self.editor_state = "opening"
+        self.editor_state_queue.append("opening")
         self.viewport_changed = True
         self.editor_changed = True
     
     def deselect_entity(self):
         self.selected_entity = None
-        self.editor_state = "closing"
+        self.editor_state_queue.append("closing")
         self.viewport_changed = True
         self.editor_changed = True
 
@@ -590,3 +631,4 @@ class LevelRunner:
 
 if __name__ == "__main__":
     LevelRunner(test_level2).run()
+    # LevelRunner(minimal_level).run()

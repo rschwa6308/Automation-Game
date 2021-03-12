@@ -26,6 +26,7 @@ class Entity:
     orients: bool = False
     stops: bool = False
     merges: bool = False
+    editable: bool = False
     has_ports: bool = False
     draw_precedence: int = 0
 
@@ -207,6 +208,7 @@ class ResourceExtractor(Block):
     name = "Resource Extractor"
     ascii_str = "X"
     orients = True
+    editable = True
 
     # resource extractors are unlocked by default
     def __init__(self, orientation: Direction = Direction.NORTH, locked: bool = False):
@@ -242,6 +244,7 @@ class Boostpad(Carpet):
     name = "Boostpad"
     ascii_str = "X"
     orients = True
+    editable = True
 
     # boostpads are unlocked by default
     def __init__(self, orientation: Direction = Direction.NORTH, locked: bool = False):
@@ -295,6 +298,7 @@ class Target(Carpet):
 
 class Wirable(Entity):
     has_ports = True
+    editable = True
 
     def __init__(self, locked: bool):
         super().__init__(locked)
@@ -380,8 +384,8 @@ class Piston(Block, Wirable):
 
         self.widgets = [
             DirectionEditor(self, "localvar:orientation", "orientation"),
-            WireEditor(self, 0, "test in"),
-            WireEditor(self, 1, "test out"),
+            WireEditor(self, 0, "input"),
+            WireEditor(self, 1, "output"),
         ]
     
     def resolve_output_port(self, i) -> bool:
@@ -440,7 +444,7 @@ class Piston(Block, Wirable):
 
 
 class Sensor(Block, Wirable):
-    name = "Piston"
+    name = "Sensor"
     ascii_str = "S"
     orients = True
 
@@ -461,7 +465,7 @@ class Sensor(Block, Wirable):
 
         self.widgets = [
             DirectionEditor(self, "localvar:orientation", "orientation"),
-            WireEditor(self, 0, "test out"),
+            WireEditor(self, 0, "output"),
         ]
     
     def resolve_output_port(self, i) -> bool:

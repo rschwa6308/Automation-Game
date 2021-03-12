@@ -142,18 +142,26 @@ def render_board(
 class SnapshotProvider:
     """provides a clean interface for obtaining snapshots of the rendered board"""
     # TODO: decide if we like showing the selected_entity highlight in the snapshot or not
-    zoom_level = 0.5    # arbitrary choice
+    zoom_level = 0.45    # arbitrary choice
 
     def __init__(self, level_runner):
         self.level_runner = level_runner
 
     def take_snapshot(self, entity, dims) -> pg.Surface:
         surf = pg.Surface(dims)
-        pos = self.level_runner.level.board.find(entity)
-        if pos is None:
-            raise ValueError("desired entity not found while taking snapshot")
-        cam = Camera(pos + V2(0.5, 0.5), self.zoom_level)
-        render_board(self.level_runner.level.board, surf, cam, selected_entity=self.level_runner.selected_entity)
+        if entity is self.level_runner.held_entity:
+            # TODO: maybe draw a hand icon here showing that the entity is being held (?)
+            surf.fill((255, 255, 255))
+        else:
+            pos = self.level_runner.level.board.find(entity)
+            if pos is None:
+                raise ValueError(f"desired entity not found while taking snapshot ({entity})")
+            cam = Camera(pos + V2(0.5, 0.5), self.zoom_level)
+            render_board(
+                self.level_runner.level.board, surf, cam,
+                selected_entity=self.level_runner.selected_entity,
+                substep_progress=self.level_runner.substep_progress
+            )
         return surf
     
     def take_snapshot_at_mouse(self, dims):
@@ -164,5 +172,9 @@ class SnapshotProvider:
             self.level_runner.screen_height,
         )
         cam = Camera(pos, self.zoom_level)
-        render_board(self.level_runner.level.board, surf, cam, selected_entity=self.level_runner.selected_entity)
+        render_board(
+            self.level_runner.level.board, surf, cam,
+            selected_entity=self.level_runner.selected_entity,
+            substep_progress=self.level_runner.substep_progress
+        )
         return surf

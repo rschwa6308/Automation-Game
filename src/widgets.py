@@ -3,9 +3,9 @@ from typing import Tuple, Union
 import pygame as pg
 
 from helpers import V2, Direction, clamp, draw_chevron, draw_rectangle, render_text_centered, render_text_left_justified
-from constants import HIGHLIGHT_COLOR
+from constants import EDITOR_WIDTH, HIGHLIGHT_COLOR
 
-FONT_SIZE = 20
+FONT_SIZE = EDITOR_WIDTH / 11
 
 
 class Widget:
@@ -55,7 +55,7 @@ class AttrEditor(Widget):
     
 
 class DirectionEditor(AttrEditor):
-    aspect_ratio = 1.0
+    aspect_ratio = 1.2
 
     def __init__(self, entity, attr: str, label: str):
         super().__init__(entity, attr)
@@ -72,16 +72,16 @@ class DirectionEditor(AttrEditor):
         self.hitboxes = [
             (d, draw_chevron(
                 surf,
-                compass_center + d * s * 0.3,
+                compass_center + d * s * 0.25,
                 d,
                 (255, 255, 255) if self.get_value() is d else (0, 0, 0),
-                s * 0.15,
-                s * 0.05
+                s * 0.12,
+                s * 0.04
             ))
             for d in Direction
             if d is not Direction.NONE
         ]
-        render_text_centered(self.label, (0, 0, 0), surf, V2(rect.centerx, rect.bottom - s * 0.18), FONT_SIZE)
+        render_text_centered(self.label, (0, 0, 0), surf, V2(rect.centerx, rect.bottom - s * 0.20), FONT_SIZE)
     
     def handle_click(self, pos: V2):
         for d, hitbox in self.hitboxes:
@@ -115,7 +115,7 @@ class SmallIntEditor(AttrEditor):
 
     def draw_onto(self, surf: pg.Surface, rect: pg.Rect, **kwargs):
         super().draw_onto(surf, rect)
-        render_text_left_justified(self.label, (0, 0, 0), surf, V2(rect.left + 6, rect.centery), FONT_SIZE)
+        render_text_left_justified(self.label, (0, 0, 0), surf, V2(rect.left + rect.width * 0.03, rect.centery), FONT_SIZE)
         # TODO: draw number selector boxes
         box_width = int(rect.height * 0.75)
         box_height = int(rect.height * 0.75)
@@ -124,7 +124,7 @@ class SmallIntEditor(AttrEditor):
         low, high = self.get_limits()
         for i, n in enumerate(range(low, high + 1)):   # inclusive
             box = pg.Rect(
-                rect.left + rect.width * 0.4 + (box_width - box_thickness // 2) * i,
+                rect.left + rect.width * 0.375 + (box_width - box_thickness // 2) * i,
                 rect.centery - box_height / 2,
                 box_width, 
                 box_height
@@ -167,10 +167,10 @@ class WireEditor:
         self.entity.wirings[self.wire_index][2] = i
     
     def draw_onto(self, surf: pg.Surface, rect: pg.Rect, snapshot_provider=None) -> None:
-        render_text_left_justified(self.label, (0, 0, 0), surf, V2(rect.left + 6, rect.centery), FONT_SIZE)
+        render_text_left_justified(self.label, (0, 0, 0), surf, V2(rect.left + rect.width * 0.03, rect.centery), FONT_SIZE)
 
-        w = rect.width * 0.4
-        h = rect.height * 0.8
+        w = rect.width * 0.45
+        h = w   # rect.height * 0.9
         self.snapshot_rect = pg.Rect(
             rect.left + rect.width * 0.70 - w / 2, rect.top + (rect.height - h) / 2,
             w, h
@@ -180,7 +180,7 @@ class WireEditor:
         pg.draw.rect(surf, (255, 255, 255), self.snapshot_rect)
 
         if self.get_value()[0] is None and not self.in_use:
-            size = FONT_SIZE * 0.6
+            size = FONT_SIZE * 0.65
             render_text_centered(
                 "not", (63, 63, 63), surf,
                 (self.snapshot_rect.centerx, self.snapshot_rect.centery - size/2), size

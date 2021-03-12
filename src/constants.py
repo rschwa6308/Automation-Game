@@ -10,7 +10,7 @@ TARGET_FPS              = 60
 
 # Layout-Related Constants
 SHELF_HEIGHT            = 100
-EDITOR_WIDTH            = 200
+EDITOR_WIDTH            = 250
 
 PALETTE_ITEM_SIZE       = 64
 PALETTE_ITEM_SPACING    = 8 
@@ -31,7 +31,7 @@ SHELF_ICON_COLOR_OFF        = (110, 110, 110)
 
 
 # Rendering-Related Constants
-HIGHLIGHT_COLOR         = (255, 255, 0)
+HIGHLIGHT_COLOR         = (253, 255, 50)
 
 VIEWPORT_BG_COLOR       = (255, 255, 255)
 GRID_LINE_COLOR         = (0, 0, 0)

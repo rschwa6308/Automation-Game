@@ -311,7 +311,15 @@ class Level:
     
     def save_state(self):
         """save the current board and palette state"""
-        self.saved_state = (deepcopy(self.board), deepcopy(self.palette))
+        # explicitly copy each entity (sequentially) for later reference
+        self.entity_copy_memo = {}
+        for _, e in self.board.get_all():
+            self.entity_copy_memo[id(e)] = deepcopy(e, self.entity_copy_memo)
+        
+        self.saved_state = (
+            deepcopy(self.board, self.entity_copy_memo),
+            deepcopy(self.palette)
+        )
 
     def load_saved_state(self):
         """revert `board` and `palette` to their states at the last call to `save_state`"""
