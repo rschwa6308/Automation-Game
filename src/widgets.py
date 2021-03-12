@@ -55,7 +55,7 @@ class AttrEditor(Widget):
     
 
 class DirectionEditor(AttrEditor):
-    aspect_ratio = 1.2
+    aspect_ratio = 1.25
 
     def __init__(self, entity, attr: str, label: str):
         super().__init__(entity, attr)
@@ -81,7 +81,7 @@ class DirectionEditor(AttrEditor):
             for d in Direction
             if d is not Direction.NONE
         ]
-        render_text_centered(self.label, (0, 0, 0), surf, V2(rect.centerx, rect.bottom - s * 0.20), FONT_SIZE)
+        render_text_centered(self.label, (0, 0, 0), surf, V2(rect.centerx, rect.bottom - s * 0.16), FONT_SIZE)
     
     def handle_click(self, pos: V2):
         for d, hitbox in self.hitboxes:

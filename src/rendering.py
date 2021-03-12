@@ -150,8 +150,15 @@ class SnapshotProvider:
     def take_snapshot(self, entity, dims) -> pg.Surface:
         surf = pg.Surface(dims)
         if entity is self.level_runner.held_entity:
-            # TODO: maybe draw a hand icon here showing that the entity is being held (?)
-            surf.fill((255, 255, 255))
+            return self.take_snapshot_at_mouse(dims)
+            # # TODO: maybe draw a hand icon here showing that the entity is being held (?)
+            # # for now, draw a fake empty board
+            # cam = Camera(V2(0.5, 0.5), self.zoom_level)
+            # render_board(
+            #     Board(), surf, cam,
+            #     selected_entity=self.level_runner.selected_entity,
+            #     substep_progress=self.level_runner.substep_progress
+            # )
         else:
             pos = self.level_runner.level.board.find(entity)
             if pos is None:

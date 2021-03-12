@@ -395,9 +395,9 @@ class LevelRunner:
         
         if self.held_entity is not None:
             self.reblit_needed = True
+            self.editor_changed = True
         
         if self.wiring_widget is not None:
-            self.reblit_needed = True
             self.editor_changed = True
 
     def draw_level(self):
