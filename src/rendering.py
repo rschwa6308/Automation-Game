@@ -53,6 +53,14 @@ class Camera:
         screen_center = V2(screen_width / 2, screen_height / 2)
         diff = pos - screen_center
         return self.center + diff * (1 / self.get_cell_size_px())
+    
+    def get_grid_line_width(self):
+        w = round(DEFAULT_GRID_LINE_WIDTH * self.zoom_level)
+        return clamp(w, MIN_GRID_LINE_WIDTH, MAX_GRID_LINE_WIDTH)
+
+    def get_wire_width(self):
+        w = round(DEFAULT_WIRE_WIDTH * self.zoom_level)
+        return clamp(w, MIN_GRID_LINE_WIDTH, MAX_GRID_LINE_WIDTH)
 
 
 def render_board(
@@ -85,9 +93,7 @@ def render_board(
         ceil(h) + 1
     )
     
-    grid_line_width = round(DEFAULT_GRID_LINE_WIDTH * cam.zoom_level ** 0.5)
-    grid_line_width = clamp(grid_line_width, MIN_GRID_LINE_WIDTH, MAX_GRID_LINE_WIDTH)
-    # grid_line_width = 1
+    grid_line_width = cam.get_grid_line_width()
 
     # draw board
     for grid_pos, cell in board.get_cells(grid_rect):
@@ -126,9 +132,9 @@ def render_board(
     # draw wires
     # TODO: make wire appearance change when ON or OFF
     if wiring_visible:
-        wire_width = grid_line_width        # same as grid width
+        wire_width = cam.get_wire_width()
         for pos, e in board.get_all(filter_type=Wirable):
-            for _, d, i in e.wirings:
+            for i, (_, d, _) in enumerate(e.wirings):
                 if d is None: continue
                 d_pos = board.find(d)
                 if d_pos is None:

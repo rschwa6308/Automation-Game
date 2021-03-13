@@ -11,7 +11,7 @@ from pygame.transform import threshold
 
 from helpers import V2, Direction, all_subclasses, draw_aacircle, draw_chevron, draw_rectangle, render_text_centered, interpolate_colors, sgn
 from colors import Color
-from widgets import DirectionEditor, SmallIntEditor, Spacing, Widget, WireEditor
+from widgets import DirectionEditor, MinusPlusButton, SmallIntEditor, Spacing, Widget, WireEditor
 from constants import *
 
 
@@ -295,7 +295,6 @@ class Target(Carpet):
         )
 
 
-
 class Wirable(Entity):
     has_ports = True
     editable = True
@@ -318,6 +317,24 @@ class Wirable(Entity):
             if not inp and e is None:
                 res.append(i)
         return res
+    
+    def make_connection(self, i, other, j):
+        if self.wirings[i][0] == other.wirings[j][0]:
+            raise ValueError("cannot connect ports of the same type (e.g. input-input)")
+
+        self.wirings[i][1] = other
+        self.wirings[i][2] = j
+        other.wirings[j][1] = self  # other side of connection
+        other.wirings[j][2] = i     # ^^^
+    
+    def break_connection(self, i):
+        _, other, j = self.wirings[i]
+        if other is None: return    # NoOp
+
+        other.wirings[j][1] = None  # other side of connection
+        other.wirings[j][2] = None  # ^^^
+        self.wirings[i][1] = None
+        self.wirings[i][2] = None
     
     def clear_ports(self) -> None:
         self.port_states =  [None for _ in self.port_states]
@@ -359,7 +376,6 @@ class Wirable(Entity):
         pass
 
 
-
 class Piston(Block, Wirable):
     name = "Piston"
     ascii_str = "P"
@@ -371,7 +387,7 @@ class Piston(Block, Wirable):
     def __init__(self, orientation: Direction = Direction.NORTH, locked: bool = False):
         super().__init__(locked)
         if orientation is Direction.NONE:
-            raise ValueError("Boostpad orientation cannot be `Direction.NONE`")
+            raise ValueError("Piston orientation cannot be `Direction.NONE`")
         self.orientation = orientation
         self.activated = None
         
@@ -453,7 +469,7 @@ class Sensor(Block, Wirable):
     def __init__(self, orientation: Direction = Direction.NORTH, locked: bool = False):
         super().__init__(locked)
         if orientation is Direction.NONE:
-            raise ValueError("Boostpad orientation cannot be `Direction.NONE`")
+            raise ValueError("Sensor orientation cannot be `Direction.NONE`")
         self.orientation = orientation
         self.activated = None
         
@@ -505,14 +521,110 @@ class Sensor(Block, Wirable):
             pg.draw.line(surf, (0, 0, 0), tuple(start), tuple(end), width=round(draw_width/2))
 
 
+class Gate(Wirable):
+    """abstract class defining the common behavior of all (single-output) logic gates"""
+    orients = False
+
+    min_num_inputs = 2
+    max_num_inputs = 5
+
+    def __init__(self, locked: bool = False):
+        super().__init__(locked)
+        self.activated = None
+        
+        self.num_inputs = self.min_num_inputs
+
+        # format is [(is_input, other_entity, other_entity's wire_index)]
+        self.wirings: Sequence[Sequence[bool, Entity, int]] = [
+            [True, None, None] for _ in range(self.num_inputs)
+        ] + [[False, None, None]]
+        self.port_states = [None for _ in self.wirings]
+
+        self.update_widgets()
+    
+    def update_widgets(self):
+        num_inputs_changable = self.max_num_inputs > self.min_num_inputs
+
+        self.widgets = [
+            WireEditor(self, i, f"input {i + 1 if num_inputs_changable else ''}") for i in range(self.num_inputs)
+        ] + [WireEditor(self, self.num_inputs, f"output")]
+
+        # if interval for num_inputs contains more than 1 possible value, add a MinusPlusButton
+        if num_inputs_changable:
+            mp_button = MinusPlusButton(
+                self, self.remove_input, self.add_input,
+                limits=[self.min_num_inputs, self.max_num_inputs],
+                attr="localvar:num_inputs"
+            )
+            self.widgets.insert(self.num_inputs, mp_button)
+            self.widgets.insert(self.num_inputs + 1, Spacing(20.0))
+
+    def remove_input(self):
+        if self.num_inputs <= self.min_num_inputs: return
+        # break the connection
+        self.break_connection(self.num_inputs - 1)
+        self.num_inputs -= 1
+        self.wirings.pop(-2)        # last input
+        self.port_states.pop(-2)
+        self.update_widgets()
+
+    def add_input(self):
+        if self.num_inputs >= self.max_num_inputs: return
+        self.num_inputs += 1
+        self.wirings.insert(-1, [True, None, None])
+        self.port_states.insert(-1, None)
+        self.update_widgets()
+    
+    def resolve_output_port(self, i) -> bool:
+        super().resolve_output_port(i)
+
+        return self.eval(*[self.resolve_port(i) for i in range(self.num_inputs)])
+    
+    @abstractmethod
+    def eval(self, *inputs: Sequence[bool]) -> bool:
+        raise NotImplementedError("Gate must define an `eval` method")
+    
+    # TEMPORARY - TODO: implement per gate type
+    def draw_onto_base(self, surf: pg.Surface, rect: pg.Rect, edit_mode: bool, step_progress: float=0.0, neighborhood=(([],) * 5,) * 5):
+        super().draw_onto_base(surf, rect, edit_mode, step_progress=step_progress, neighborhood=neighborhood)
+        font_size = rect.width * 0.3
+        text = self.name.split()[0]     # gate type
+        render_text_centered(text, (0, 0, 0), surf, rect.center, font_size, bold=True)
+
+
+class AndGate(Gate):
+    name = "AND Gate"
+
+    def eval(self, *inputs) -> bool:
+        return all(inputs)
+
+
+class OrGate(Gate):
+    name = "OR Gate"
+
+    def eval(self, *inputs) -> bool:
+        return any(inputs)
+
+
+class NotGate(Gate):
+    name = "NOT Gate"
+
+    min_num_inputs = 1
+    max_num_inputs = 1
+
+    def eval(self, a: bool) -> bool:
+        print(a)
+        return not a
+
+
 # TODO:
 # - signal splitters
-# - NOT gates
-# - AND gates
-# - OR gates
+# - AND gates . . . . Done!
+# - OR gates  . . . . Done!
+# - NOT gates . . . . Done!
 
 
 
-ENTITY_TYPES = [Barrel, Barrier, Boostpad, ResourceExtractor, ResourceTile, Target, Piston, Sensor]
+ENTITY_TYPES = [Barrel, Barrier, Boostpad, ResourceExtractor, ResourceTile, Target, Piston, Sensor, AndGate, OrGate, NotGate]
 # ENTITY_TYPES = all_subclasses(Entity)
 # print(ENTITY_TYPES)

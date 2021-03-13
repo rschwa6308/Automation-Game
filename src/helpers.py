@@ -186,6 +186,16 @@ def interpolate_colors(a, b, bias):
 def all_subclasses(cls):
     return set(cls.__subclasses__()).union(
         [s for c in cls.__subclasses__() for s in all_subclasses(c)])
+
+def rect_union(rects):
+    rect = None
+    for r in rects:
+        if r is None: continue
+        if rect is None:
+            rect = r.copy()
+        else:
+            rect.union_ip(r)
+    return rect
 # ------------ #
 
 

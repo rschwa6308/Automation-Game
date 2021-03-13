@@ -454,7 +454,7 @@ class LevelRunner:
                 "(read-only)",
                 (0, 0, 0),
                 self.editor_surf,
-                (EDITOR_WIDTH // 2, y_pos + header_font_height // 2),
+                (EDITOR_WIDTH // 2, y_pos + read_only_indicator_font_height // 2 + 4),  # pad down just a little extra
                 read_only_indicator_font_height,
                 bold=True
             )
@@ -484,7 +484,7 @@ class LevelRunner:
 
         # draw wiring while moving entity
         if self.held_entity.has_ports:
-            wire_width = round(DEFAULT_GRID_LINE_WIDTH * self.camera.zoom_level ** 0.5)
+            wire_width = self.camera.get_wire_width()
             for _, other, _ in self.held_entity.wirings:
                 if other is not None:
                     other_pos = grid_to_px(self.level.board.find(other) + V2(0.5, 0.5))
@@ -499,7 +499,7 @@ class LevelRunner:
             return (V2(*self.viewport_surf.get_rect().center) + (pos - self.camera.center) * s).floor()
 
         start = grid_to_px(self.level.board.find(self.editing_entity) + V2(0.5, 0.5))
-        wire_width = round(DEFAULT_GRID_LINE_WIDTH * self.camera.zoom_level ** 0.5)
+        wire_width = self.camera.get_wire_width()
         pg.draw.line(self.screen, WIRE_COLOR_OFF, tuple(start), tuple(self.mouse_pos), wire_width)
 
     def select_entity(self, entity):
@@ -599,24 +599,22 @@ class LevelRunner:
             e is self.wiring_widget.entity,             # cannot connect to self
             not isinstance(e, Wirable)
         ]):
-            # clear connection
-            self.wiring_widget.set_value(None, None)
+            # break connection
+            self.wiring_widget.break_connection()
             successful = True
         else:
             # only connect if input-output or output-input and target (`e`) has slot available
+            # TODO: if target is at capacity but can further expand it's number of input/output ports, do so automatically
             ao = e.available_outputs()
             ai = e.available_inputs()
+            j = None
             if self.wiring_widget.is_input and ao:
                 j = min(ao)
-                self.wiring_widget.set_value(e, j)
-                e.wirings[j][1] = self.wiring_widget.entity     # other side of connection
-                e.wirings[j][2] = self.wiring_widget.wire_index # ^^^
-                successful = True
             elif not self.wiring_widget.is_input and ai:
                 j = min(ai)
-                self.wiring_widget.set_value(e, j)
-                e.wirings[j][1] = self.wiring_widget.entity     # other side of connection
-                e.wirings[j][2] = self.wiring_widget.wire_index # ^^^
+            
+            if j is not None:
+                self.wiring_widget.make_connection(e, j)
                 successful = True
                     
         if successful:

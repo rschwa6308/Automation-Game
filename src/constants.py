@@ -42,6 +42,7 @@ DEFAULT_CELL_SIZE           = 64
 DEFAULT_GRID_LINE_WIDTH     = 2
 MIN_GRID_LINE_WIDTH         = 1
 MAX_GRID_LINE_WIDTH         = 5
+DEFAULT_WIRE_WIDTH          = 4
 
 
 # Misc Constants

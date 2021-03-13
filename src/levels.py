@@ -37,7 +37,10 @@ test_board2 = Board({
 })
 
 test_level2 = Level(test_board2, Palette({
-    Sensor: 2
+    Sensor: 3,
+    AndGate: 3,
+    OrGate: 3,
+    NotGate: 3
 }))
 
 

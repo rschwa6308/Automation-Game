@@ -1,8 +1,8 @@
 # --- UI-Widgets for the Editor Panel --- #
-from typing import Tuple, Union
+from typing import Callable, Tuple, Union
 import pygame as pg
 
-from helpers import V2, Direction, clamp, draw_chevron, draw_rectangle, render_text_centered, render_text_left_justified
+from helpers import V2, Direction, clamp, draw_aacircle, draw_chevron, draw_rectangle, rect_union, render_text_centered, render_text_left_justified
 from constants import EDITOR_WIDTH, HIGHLIGHT_COLOR
 
 FONT_SIZE = EDITOR_WIDTH / 11
@@ -13,6 +13,7 @@ class Widget:
     
     def draw_onto(self, surf: pg.Surface, rect: pg.Rect, **kwargs) -> None:
         assert(rect.width // rect.height == int(self.aspect_ratio))
+        # draw bounding box
         # pg.draw.rect(surf, (0, 0, 0), rect, width=1)
     
     def handle_click(self, pos: V2) -> bool:
@@ -22,6 +23,17 @@ class Widget:
         return True iff we wish to indicate to the level runner that this wiring widget is in use
         """
         return False
+    
+    def get_attr(self, attr_str):
+        return self.entity.__getattribute__(self.parse_attr_string(attr_str))
+    
+    @staticmethod
+    def parse_attr_string(string: str):
+        prefix = "localvar:"
+        if not string.startswith(prefix):
+            raise ValueError(f"invalid attr string: {string}")
+        
+        return string[len(prefix):]
 
 
 
@@ -36,22 +48,11 @@ class AttrEditor(Widget):
         self.entity = entity
         self.attr = attr
     
-    def get_attr(self, attr_str):
-        return self.entity.__getattribute__(self.parse_attr_string(attr_str))
-    
     def get_value(self):
         return self.get_attr(self.attr)
     
     def set_value(self, value):
         self.entity.__setattr__(self.parse_attr_string(self.attr), value)
-    
-    @staticmethod
-    def parse_attr_string(string: str):
-        prefix = "localvar:"
-        if not string.startswith(prefix):
-            raise ValueError(f"invalid attr string: {string}")
-        
-        return string[len(prefix):]
     
 
 class DirectionEditor(AttrEditor):
@@ -143,7 +144,7 @@ class SmallIntEditor(AttrEditor):
         return False
 
 
-class WireEditor:
+class WireEditor(Widget):
     aspect_ratio = 2.0
 
     def __init__(self, entity, wire_index: int, label: str):
@@ -153,7 +154,6 @@ class WireEditor:
         self.snapshot_rect = None
         self.is_input = entity.wirings[wire_index][0]   # tracks if wire is an input or an output
         self.in_use = False
-        # self.old_value = (None, None)
     
     def get_value(self):
         return (
@@ -161,12 +161,14 @@ class WireEditor:
             self.entity.wirings[self.wire_index][2]
         )
 
-    def set_value(self, e, i):
-        # self.old_value = self.get_value()
-        self.entity.wirings[self.wire_index][1] = e
-        self.entity.wirings[self.wire_index][2] = i
+    def make_connection(self, e, j):
+        self.entity.make_connection(self.wire_index, e, j)
+    
+    def break_connection(self):
+        self.entity.break_connection(self.wire_index)
     
     def draw_onto(self, surf: pg.Surface, rect: pg.Rect, snapshot_provider=None) -> None:
+        super().draw_onto(surf, rect)
         render_text_left_justified(self.label, (0, 0, 0), surf, V2(rect.left + rect.width * 0.03, rect.centery), FONT_SIZE)
 
         w = rect.width * 0.45
@@ -202,11 +204,111 @@ class WireEditor:
     
     def handle_click(self, pos: V2) -> None:
         if self.snapshot_rect.collidepoint(*pos):
-            # break other side of connection
-            other, j = self.get_value()
-            if other is not None:
-                other.wirings[j][1] = None
-                other.wirings[j][2] = None
-            self.set_value(None, None)
+            # break connection
+            self.break_connection()
             self.in_use = True
             return True
+
+
+# class Button(Widget):
+    # def __init__(self, entity, on_press: Callable):
+    #     self.entity = entity
+    #     self.on_press = on_press
+
+    #     self.hitbox: pg.Rect = None      # set in self.draw_onto
+    
+    # def handle_click(self, pos: V2) -> bool:
+    #     if self.hitbox is not None and self.hitbox.collidepoint(*pos):
+    #         self.on_press()
+    
+
+class MinusPlusButton(Widget):
+    """
+    a widget that displays a minus and a plus button (- / +);
+    if supplied, `limits` and `attr` control whether either button should be hidden
+    """
+    aspect_ratio = 7.0
+
+    def __init__(self, entity, on_press_minus: Callable, on_press_plus: Callable, limits=None, attr=None):
+        self.entity = entity
+        self.on_press_minus = on_press_minus
+        self.on_press_plus = on_press_plus
+
+        self.limits = limits
+        self.attr = attr
+
+        self.minus_hitbox: pg.Rect = None   # set in self.draw_onto
+        self.plus_hitbox: pg.Rect = None    # set in self.draw_onto
+    
+    def handle_click(self, pos: V2) -> bool:
+        if self.minus_hitbox is not None and self.minus_hitbox.collidepoint(*pos):
+            self.on_press_minus()
+        elif self.plus_hitbox is not None and self.plus_hitbox.collidepoint(*pos):
+            self.on_press_plus()
+
+    def draw_onto(self, surf: pg.Surface, rect: pg.Rect, **kwargs) -> None:
+        super().draw_onto(surf, rect, **kwargs)
+
+        radius = round(rect.height * 0.40)
+        border_width = 2
+        # draw_width = round(rect.height * 0.075)
+        spacing = radius * 2 + border_width
+
+        if self.attr is None:
+            minus_visible = True
+            plus_visible = True
+        else:
+            minus_visible = self.get_attr(self.attr) > self.limits[0]
+            plus_visible = self.get_attr(self.attr) < self.limits[1]
+
+        if not (minus_visible or plus_visible):
+            raise RuntimeError("at least one of minus/plus buttons must be visible")
+        
+        if minus_visible and plus_visible:
+            minus_center = (rect.centerx - spacing//2, rect.centery)
+            plus_center = (rect.centerx + spacing//2, rect.centery)
+        elif minus_visible:
+            minus_center = rect.center
+        elif plus_visible:
+            plus_center = rect.center
+
+        self.minus_hitbox = pg.Rect(
+            minus_center[0] - radius, minus_center[1] - radius,
+            radius * 2, radius * 2
+        ) if minus_visible else None
+
+        self.plus_hitbox = pg.Rect(
+            plus_center[0] - radius, plus_center[1] - radius,
+            radius * 2, radius * 2
+        ) if plus_visible else None
+
+        background_color = (255, 255, 255)
+        border_color = (0, 0, 0)
+        icon_color = (0, 0, 0)
+        icon_font_size = FONT_SIZE * 1.0
+
+        # draw background and border
+        combined_rect = rect_union([self.minus_hitbox, self.plus_hitbox])
+        pg.draw.rect(surf, background_color, combined_rect, border_radius=radius)
+        pg.draw.rect(surf, border_color, combined_rect, width=border_width, border_radius=radius)
+
+        # draw "-" button
+        if minus_visible:
+            render_text_centered("-", icon_color, surf, self.minus_hitbox.center, icon_font_size)
+
+        # draw "+" button
+        if plus_visible:
+            render_text_centered("+", icon_color, surf, self.plus_hitbox.center, icon_font_size)
+
+        # draw divider
+        if minus_visible and plus_visible:
+            pg.draw.line(
+                surf, icon_color,
+                (rect.centerx, rect.centery - radius / 2),
+                (rect.centerx, rect.centery + radius / 2),
+                width=border_width
+            )
+            # render_text_centered("|", icon_color, surf, rect.center, FONT_SIZE)
+        
+
+

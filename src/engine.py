@@ -184,9 +184,9 @@ class Level:
         self.won = False
 
         self.substeps = [
-            [self.reset_wiring_network, self.apply_resource_extractors, self.apply_translations],
-            [self.apply_merges, self.apply_sensors, self.resolve_wiring_network, self.apply_pistons],
-            [self.apply_merges, self.apply_rotations, self.apply_targets, self.check_won],
+            [self.apply_merges, self.apply_rotations, self.apply_targets, self.check_won] +             # clean up pistons
+            [self.reset_wiring_network, self.apply_resource_extractors, self.apply_translations],       # main motion step
+            [self.apply_merges, self.apply_sensors, self.resolve_wiring_network, self.apply_pistons]    # 'reactive' electronics and whatnot step
         ]
         self.current_substep = 0
     
@@ -311,11 +311,8 @@ class Level:
     
     def save_state(self):
         """save the current board and palette state"""
-        # explicitly copy each entity (sequentially) for later reference
-        self.entity_copy_memo = {}
-        for _, e in self.board.get_all():
-            self.entity_copy_memo[id(e)] = deepcopy(e, self.entity_copy_memo)
-        
+        # store copies mapping for later reference
+        self.entity_copy_memo = {}        
         self.saved_state = (
             deepcopy(self.board, self.entity_copy_memo),
             deepcopy(self.palette)
