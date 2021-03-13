@@ -30,10 +30,15 @@ class Entity:
     has_ports: bool = False
     draw_precedence: int = 0
 
-    def __init__(self, locked: bool):
+    def __init__(self, locked: bool, prototype: EntityPrototype = None):
         self.locked = locked
         self.animations = []
-        # self.garbage = False    # flag for deletion on next step
+
+        # if prototype not supplied, assume default 'vanilla' prototype
+        if prototype is None:
+            prototype = EntityPrototype(type(self))
+        
+        self.prototype = prototype
     
     @abstractmethod
     def draw_onto(
@@ -77,16 +82,16 @@ class Carpet(Entity):
     stops = False
     draw_precedence = 0
 
-    def __init__(self, locked: bool):
-        super().__init__(locked)
+    def __init__(self, locked: bool, **kwargs):
+        super().__init__(locked, **kwargs)
 
 
 class Block(Entity):
     stops = True
     draw_precedence = 1
 
-    def __init__(self, locked: bool):
-        super().__init__(locked)
+    def __init__(self, locked: bool, **kwargs):
+        super().__init__(locked, **kwargs)
 
 
 class Barrier(Block):
@@ -95,8 +100,8 @@ class Barrier(Block):
     stops = True
     
     # barriers are locked by default
-    def __init__(self, locked: bool = True):
-        super().__init__(locked)
+    def __init__(self, locked: bool = True, **kwargs):
+        super().__init__(locked, **kwargs)
 
     def draw_onto_base(self, surf: pg.Surface, rect: pg.Rect, edit_mode: bool, step_progress: float = 0.0, neighborhood = (([],) * 5,) * 5):
         pg.draw.rect(surf, (50, 50, 50), rect)
@@ -111,8 +116,8 @@ class Barrel(Block):
     draw_precedence = 2     # on top of all other blocks
 
     # barrels are unlocked by default
-    def __init__(self, color: Color, velocity: Direction = Direction.NONE, locked: bool = False):
-        super().__init__(locked)
+    def __init__(self, color: Color, velocity: Direction = Direction.NONE, locked: bool = False, **kwargs):
+        super().__init__(locked, **kwargs)
         self.color = color
         self.velocity = velocity
         self.leaky = False
@@ -183,8 +188,8 @@ class ResourceTile(Carpet):
     ascii_str = "O"
 
     # resource tiles are always locked
-    def __init__(self, color: Color):
-        super().__init__(True)
+    def __init__(self, color: Color, **kwargs):
+        super().__init__(True, **kwargs)
         self.color = color
     
     def draw_onto_base(self, surf: pg.Surface, rect: pg.Rect, edit_mode: bool, step_progress: float = 0.0, neighborhood = (([],) * 5,) * 5):
@@ -211,8 +216,8 @@ class ResourceExtractor(Block):
     editable = True
 
     # resource extractors are unlocked by default
-    def __init__(self, orientation: Direction = Direction.NORTH, locked: bool = False):
-        super().__init__(locked)
+    def __init__(self, orientation: Direction = Direction.NORTH, locked: bool = False, **kwargs):
+        super().__init__(locked, **kwargs)
         self.orientation = orientation
         self.period = 3
         self.phase = 1
@@ -247,8 +252,8 @@ class Boostpad(Carpet):
     editable = True
 
     # boostpads are unlocked by default
-    def __init__(self, orientation: Direction = Direction.NORTH, locked: bool = False):
-        super().__init__(locked)
+    def __init__(self, orientation: Direction = Direction.NORTH, locked: bool = False, **kwargs):
+        super().__init__(locked, **kwargs)
         if orientation is Direction.NONE:
             raise ValueError("Boostpad orientation cannot be `Direction.NONE`")
         self.orientation = orientation
@@ -275,8 +280,8 @@ class Target(Carpet):
     ascii_str = "T"
 
     # targets are always locked
-    def __init__(self, color: Color, count: int):
-        super().__init__(True)
+    def __init__(self, color: Color, count: int, **kwargs):
+        super().__init__(True, **kwargs)
         self.color = color
         self.count = count
     
@@ -299,8 +304,8 @@ class Wirable(Entity):
     has_ports = True
     editable = True
 
-    def __init__(self, locked: bool):
-        super().__init__(locked)
+    def __init__(self, locked: bool, **kwargs):
+        super().__init__(locked, **kwargs)
         self.wirings = []
         self.port_states = []
 
@@ -384,8 +389,8 @@ class Piston(Block, Wirable):
     max_amt = 0.75
 
     # boostpads are unlocked by default
-    def __init__(self, orientation: Direction = Direction.NORTH, locked: bool = False):
-        super().__init__(locked)
+    def __init__(self, orientation: Direction = Direction.NORTH, locked: bool = False, **kwargs):
+        super().__init__(locked, **kwargs)
         if orientation is Direction.NONE:
             raise ValueError("Piston orientation cannot be `Direction.NONE`")
         self.orientation = orientation
@@ -466,8 +471,8 @@ class Sensor(Block, Wirable):
 
     target_entity_type = Barrel
 
-    def __init__(self, orientation: Direction = Direction.NORTH, locked: bool = False):
-        super().__init__(locked)
+    def __init__(self, orientation: Direction = Direction.NORTH, locked: bool = False, **kwargs):
+        super().__init__(locked, **kwargs)
         if orientation is Direction.NONE:
             raise ValueError("Sensor orientation cannot be `Direction.NONE`")
         self.orientation = orientation
@@ -528,8 +533,8 @@ class Gate(Wirable):
     min_num_inputs = 2
     max_num_inputs = 5
 
-    def __init__(self, locked: bool = False):
-        super().__init__(locked)
+    def __init__(self, locked: bool = False, **kwargs):
+        super().__init__(locked, **kwargs)
         self.activated = None
         
         self.num_inputs = self.min_num_inputs
@@ -613,7 +618,6 @@ class NotGate(Gate):
     max_num_inputs = 1
 
     def eval(self, a: bool) -> bool:
-        print(a)
         return not a
 
 
@@ -628,3 +632,23 @@ class NotGate(Gate):
 ENTITY_TYPES = [Barrel, Barrier, Boostpad, ResourceExtractor, ResourceTile, Target, Piston, Sensor, AndGate, OrGate, NotGate]
 # ENTITY_TYPES = all_subclasses(Entity)
 # print(ENTITY_TYPES)
+
+
+
+class EntityPrototype:
+    """a class for storing entity prototypes (e.g. in the palette)"""
+    def __init__(self, entity_type, **kwargs):
+        self.entity_type = entity_type
+        self.kwargs = kwargs
+
+    def get_instance(self):
+        return self.entity_type(prototype=self, **self.kwargs)
+    
+    # def __hash__(self):
+    #     print((self.entity_type, tuple(self.kwargs.items())))
+    #     res = (self.entity_type, tuple(self.kwargs.items())).__hash__()
+    #     print(res)
+    #     return res
+
+    def __eq__(self, o: EntityPrototype) -> bool:
+        return self.entity_type == o.entity_type and self.kwargs == o.kwargs

@@ -4,10 +4,11 @@ from math import floor, ceil
 import pygame as pg
 
 from entities import Entity, Wirable
+from postprocessing import PostprocessingEffect
 from widgets import Widget, WireEditor
 from engine import Board, Level
 from rendering import Camera, DEFAULT_CELL_SIZE, SnapshotProvider, render_board
-from levels import test_level, test_level2, resource_test, test_level3, minimal_level
+from levels import test_level, test_level2, test_level3, minimal_level, new_test_level
 from helpers import V2, draw_aapolygon, draw_rect_alpha, render_text_centered, clamp, wrap_text
 from constants import *
 
@@ -20,8 +21,9 @@ class LevelRunner:
     #     pg.K_d: Direction.EAST
     # }
 
-    def __init__(self, level: Level):
+    def __init__(self, level: Level, postprocessing_effects: Sequence[PostprocessingEffect]=[]):
         self.level = level
+        self.postprocessing_effects = postprocessing_effects
 
         self.screen_width = DEFAULT_SCREEN_WIDTH
         self.screen_height = DEFAULT_SCREEN_HEIGHT
@@ -170,21 +172,29 @@ class LevelRunner:
                 self.reblit_needed = False
                 # pg.display.update()
             
+                # apply postprocessing effects
+                for effect in self.postprocessing_effects:
+                    self.screen = effect.apply_effect(self.screen)
+                self.true_screen.blit(self.screen, (0, 0))
+
             # TEMPORARY
             fps = round(clock.get_fps())
-            pg.draw.rect(self.screen, (0, 0, 0), pg.Rect(0, 0, 30, 30))
-            render_text_centered(str(fps), (255, 255, 255), self.screen, (15, 15), 25)
+            pg.draw.rect(self.true_screen, (0, 0, 0), pg.Rect(0, 0, 30, 30))
+            render_text_centered(str(fps), (255, 255, 255), self.true_screen, (15, 15), 25)
             pg.display.update()
                 
     def handle_window_resize(self, new_width, new_height):
         self.screen_width = max(new_width, MIN_SCREEN_WIDTH)
         self.screen_height = max(new_height, MIN_SCREEN_HEIGHT)
-        self.screen = pg.display.set_mode((self.screen_width, self.screen_height), pg.RESIZABLE)
+        self.screen = pg.Surface((self.screen_width, self.screen_height))
+        self.true_screen = pg.display.set_mode((self.screen_width, self.screen_height), pg.RESIZABLE)
         self.window_size_changed = True
 
         self.viewport_surf = pg.Surface((self.screen_width, self.screen_height))
         self.shelf_surf = pg.Surface((self.screen_width, SHELF_HEIGHT), pg.SRCALPHA)
         self.editor_surf = pg.Surface((EDITOR_WIDTH, self.screen_height - SHELF_HEIGHT), pg.SRCALPHA)
+        # self.editor_surf = pg.Surface((EDITOR_WIDTH, self.screen_height), pg.SRCALPHA)
+
 
     def handle_shelf_animation(self):
         if self.shelf_state == "closing":
@@ -299,13 +309,13 @@ class LevelRunner:
             if self.mouse_pos.y >= self.screen_height - self.shelf_height_onscreen:
                 # cursor is over shelf
                 adjusted_pos = self.mouse_pos - V2(0, self.screen_height - self.shelf_height_onscreen)
-                for rect, e_type in self.palette_rects:
+                for rect, e_prototype in self.palette_rects:
                     if rect.collidepoint(*adjusted_pos):
                         # pick up entity (from palette)
-                        new = e_type()  # create new entity
+                        new = e_prototype.get_instance()  # create new entity
                         self.held_entity = new
                         self.hold_point = V2(0.5, 0.5)
-                        self.level.palette.remove(self.held_entity)
+                        self.level.palette.remove(e_prototype)
                         self.deselect_entity()
                         self.select_entity(new)
                         self.shelf_changed = True
@@ -409,7 +419,7 @@ class LevelRunner:
 
         # draw palette
         self.palette_rects.clear()
-        for i, (e_type, count) in enumerate(self.level.palette.get_all()):
+        for i, (e_prototype, count) in enumerate(self.level.palette.get_all()):
             margin = (SHELF_HEIGHT - PALETTE_ITEM_SIZE) // 2
             rect = pg.Rect(
                 margin + (PALETTE_ITEM_SIZE + margin + PALETTE_ITEM_SPACING) * i,
@@ -417,9 +427,9 @@ class LevelRunner:
                 PALETTE_ITEM_SIZE,
                 PALETTE_ITEM_SIZE
             )
-            self.palette_rects.append((rect, e_type))
+            self.palette_rects.append((rect, e_prototype))
             if count > 0:   # only draw item if there are any left (maintains spacing)
-                temp_entity = e_type()
+                temp_entity = e_prototype.get_instance()
                 temp_entity.draw_onto_base(self.shelf_surf, rect, edit_mode=True)
                 # pg.draw.rect(self.shelf_surf, (0, 255, 0), rect)
                 pg.draw.circle(self.shelf_surf, (255, 0, 0), rect.topright, 14)
@@ -523,7 +533,7 @@ class LevelRunner:
         self.shelf_icon_rects.clear()
         for i, icon in enumerate(shelf_icons[::-1]):
             rect = pg.Rect(
-                self.screen_width - (SHELF_ICON_SIZE + SHELF_ICON_SPACING) * (i + 1),
+                self.screen_width - EDITOR_WIDTH/2 - SHELF_ICON_SIZE/2 - (SHELF_ICON_SIZE + SHELF_ICON_SPACING) * (i - 1),
                 self.screen_height - (SHELF_HEIGHT + SHELF_ICON_SIZE) // 2,
                 SHELF_ICON_SIZE,
                 SHELF_ICON_SIZE
@@ -628,5 +638,7 @@ class LevelRunner:
 
 
 if __name__ == "__main__":
+    # LevelRunner(new_test_level).run()
     LevelRunner(test_level2).run()
+    # LevelRunner(test_level2, [BarrelDistortion]).run()
     # LevelRunner(minimal_level).run()

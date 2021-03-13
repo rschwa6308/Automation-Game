@@ -95,6 +95,9 @@ class Board:
     
     def get_bounding_rect(self, margin: int = 0) -> pg.Rect:
         """returns the minimal rect completely containing all non-empty cells (with the given margin)"""
+        # if empty, return some default value
+        if not self.cells:
+            return pg.Rect(-5, -5, 10, 10)
         min_x = min(pos[0] for pos in self.cells) - margin
         max_x = max(pos[0] for pos in self.cells) + margin
         min_y = min(pos[1] for pos in self.cells) - margin
@@ -138,26 +141,38 @@ class Board:
 
 
 class Palette:
-    def __init__(self, items: Mapping[Type[Entity], int] = {}):
-        self.items = items
+    def __init__(self, items: Sequence[Tuple[EntityPrototype, int]] = []):
+        self.items = [list(item) for item in items]
 
-    def get_all(self) -> Sequence[Tuple[Type[Entity], int]]:
+    def get_all(self) -> Sequence[Tuple[EntityPrototype, int]]:
         """return a list of all items (with counts) sorted by name"""
-        return sorted(self.items.items(), key=lambda item: item[0].name)
+        return sorted(self.items, key=lambda item: item[0].entity_type.name)
     
-    def remove(self, entity: Entity):
-        e_type = type(entity)
-        self.items[e_type] -= 1
+    def find_match(self, proto):
+        for i, (p, _) in enumerate(self.items):
+            if p == proto:
+                return i
+        
+        return -1
+    
+    def remove(self, proto: EntityPrototype):
+        i = self.find_match(proto)
+        if i == -1:
+            raise ValueError("cannot remove non-existant item from palette")
 
-        if self.items[e_type] == 0:
-            self.items.pop(e_type)
+        self.items[i][1] -= 1
+
+        if self.items[i][1] == 0:
+            self.items.pop(i)
     
     def add(self, entity: Entity):
-        e_type = type(entity)
-        if e_type not in self.items:
-            self.items[e_type] = 0
+        proto = entity.prototype
+        i = self.find_match(proto)
 
-        self.items[e_type] += 1
+        if i == -1:
+            self.items.append([proto, 0])
+
+        self.items[i][1] += 1
 
 
 class Level:
