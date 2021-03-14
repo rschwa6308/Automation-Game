@@ -106,10 +106,10 @@ test_level3 = Level(
         (12, 10): [Target(Color.RED, count=10)],
     }),
     Palette([
-        (ResourceExtractor, 2),
-        (Boostpad, 1),
-        (Sensor, 1),
-        (Piston, 2)
+        (EntityPrototype(ResourceExtractor), 2),
+        (EntityPrototype(Boostpad), 1),
+        (EntityPrototype(Sensor), 1),
+        (EntityPrototype(Piston), 2)
     ])
 )
 
