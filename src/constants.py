@@ -39,10 +39,14 @@ WIRE_COLOR_OFF          = (127, 0, 0)
 WIRE_COLOR_ON           = (255, 0, 0)
 
 DEFAULT_CELL_SIZE           = 64
+
 DEFAULT_GRID_LINE_WIDTH     = 2
 MIN_GRID_LINE_WIDTH         = 1
 MAX_GRID_LINE_WIDTH         = 5
+
 DEFAULT_WIRE_WIDTH          = 4
+MIN_WIRE_WIDTH              = 2
+MAX_WIRE_WIDTH              = 6     # would like higher, but current bezier implementation is too slow
 
 
 # Misc Constants

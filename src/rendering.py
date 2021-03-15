@@ -61,7 +61,7 @@ class Camera:
 
     def get_wire_width(self):
         w = round(DEFAULT_WIRE_WIDTH * self.zoom_level)
-        return clamp(w, MIN_GRID_LINE_WIDTH, MAX_GRID_LINE_WIDTH)
+        return clamp(w, MIN_WIRE_WIDTH, MAX_WIRE_WIDTH)
 
 
 
