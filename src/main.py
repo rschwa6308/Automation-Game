@@ -2,6 +2,9 @@
 from typing import Union, Type, Sequence, Tuple, Optional
 from math import floor, ceil
 import pygame as pg
+import moderngl
+import struct
+import os
 
 from entities import Entity, Wirable
 from postprocessing import PostprocessingEffect
@@ -74,6 +77,14 @@ class LevelRunner:
 
     def run(self):
         """run the level in a resizable window at `TARGET_FPS`"""
+
+        pg.init()
+
+        pg.display.set_mode((DEFAULT_SCREEN_WIDTH, DEFAULT_SCREEN_HEIGHT), pg.FULLSCREEN | pg.DOUBLEBUF | pg.OPENGL)
+
+        # initialize GL variables
+        self.GL_init()
+
         # initialize display, initialize output surfaces, and adjust camera
         self.handle_window_resize(DEFAULT_SCREEN_WIDTH, DEFAULT_SCREEN_HEIGHT)
 
@@ -175,19 +186,94 @@ class LevelRunner:
                 # apply postprocessing effects
                 for effect in self.postprocessing_effects:
                     self.screen = effect.apply_effect(self.screen)
-                self.true_screen.blit(self.screen, (0, 0))
+                # self.true_screen.blit(self.screen, (0, 0))
+                self.GL_render()
 
             # TEMPORARY
-            fps = round(clock.get_fps())
-            pg.draw.rect(self.true_screen, (0, 0, 0), pg.Rect(0, 0, 30, 30))
-            render_text_centered(str(fps), (255, 255, 255), self.true_screen, (15, 15), 25)
-            pg.display.update()
-                
+            # fps = round(clock.get_fps())
+            # pg.draw.rect(self.true_screen, (0, 0, 0), pg.Rect(0, 0, 30, 30))
+            # render_text_centered(str(fps), (255, 255, 255), self.true_screen, (15, 15), 25)
+            # pg.display.update()
+
+    def GL_init(self):
+        self.ctx = moderngl.create_context()
+
+        self.texture_coordinates = [
+            0, 1,
+            1, 1,
+            0, 0, 
+            1, 0,
+        ]
+        self.world_coordinates = [
+            -1, -1,
+            1, -1,
+            -1,  1,
+            1,  1,
+        ]
+        self.render_indices = [
+            0, 1, 2,
+            1, 2, 3,
+        ]
+
+        self.prog = self.ctx.program(
+            vertex_shader=open(os.path.join("src", "shaders", "vert.glsl")).read(),
+            fragment_shader=open(os.path.join("src", "shaders", "frag.glsl")).read()
+        )
+
+        # self.screen_texture = self.ctx.texture(
+        #     (self.screen_width, self.screen_height), 3, 
+        #     pg.image.tostring(self.screen, "RGB", 1)
+        # )
+        # self.screen_texture.repeat_x = False
+        # self.screen_texture.repeat_y = False
+
+        # vbo = self.ctx.buffer(struct.pack('8f', *self.world_coordinates))
+        # uvmap = self.ctx.buffer(struct.pack('8f', *self.texture_coordinates))
+        # ibo = self.ctx.buffer(struct.pack('6I', *self.render_indices))
+
+        # vao_content = [
+        #     (vbo, '2f', 'vert'),
+        #     (uvmap, '2f', 'in_text')
+        # ]
+
+        # self.vao = self.ctx.vertex_array(self.prog, vao_content, ibo)
+
+    def GL_update_tex(self):
+        self.screen_texture = self.ctx.texture(
+            (self.screen_width, self.screen_height), 3, 
+            pg.image.tostring(self.screen, "RGB", 1)
+        )
+        self.screen_texture.repeat_x = False
+        self.screen_texture.repeat_y = False
+
+        vbo = self.ctx.buffer(struct.pack('8f', *self.world_coordinates))
+        uvmap = self.ctx.buffer(struct.pack('8f', *self.texture_coordinates))
+        ibo = self.ctx.buffer(struct.pack('6I', *self.render_indices))
+
+        vao_content = [
+            (vbo, '2f', 'vert'),
+            (uvmap, '2f', 'in_text')
+        ]
+
+        self.vao = self.ctx.vertex_array(self.prog, vao_content, ibo)
+
+    def GL_render(self):
+        texture_data = self.screen.get_view('1')
+        self.screen_texture.write(texture_data)
+        self.ctx.clear(14/255, 40/255, 66/255)
+        self.screen_texture.use()
+        self.vao.render()
+        pg.display.flip()
+
     def handle_window_resize(self, new_width, new_height):
         self.screen_width = max(new_width, MIN_SCREEN_WIDTH)
         self.screen_height = max(new_height, MIN_SCREEN_HEIGHT)
-        self.screen = pg.Surface((self.screen_width, self.screen_height))
-        self.true_screen = pg.display.set_mode((self.screen_width, self.screen_height), pg.RESIZABLE)
+
+        self.screen = pg.Surface((self.screen_width, self.screen_height)).convert((0xFF, 0xFF00, 0xFF0000, 0x0))
+        pg.display.set_mode((self.screen_width, self.screen_height), pg.DOUBLEBUF | pg.OPENGL | pg.FULLSCREEN)
+
+        self.GL_update_tex()
+
         self.window_size_changed = True
 
         self.viewport_surf = pg.Surface((self.screen_width, self.screen_height))
