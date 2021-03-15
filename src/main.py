@@ -7,7 +7,7 @@ from entities import Entity, Wirable
 from postprocessing import PostprocessingEffect
 from widgets import Widget, WireEditor
 from engine import Board, Level
-from rendering import Camera, DEFAULT_CELL_SIZE, SnapshotProvider, render_board
+from rendering import Camera, DEFAULT_CELL_SIZE, SnapshotProvider, render_board, render_wire
 from levels import test_level, test_level2, test_level3, minimal_level, new_test_level
 from helpers import V2, draw_aapolygon, draw_rect_alpha, render_text_centered, clamp, wrap_text
 from constants import *
@@ -498,7 +498,8 @@ class LevelRunner:
             for _, other, _ in self.held_entity.wirings:
                 if other is not None:
                     other_pos = grid_to_px(self.level.board.find(other) + V2(0.5, 0.5))
-                    pg.draw.line(self.screen, WIRE_COLOR_OFF, tuple(other_pos), rect.center, wire_width)
+                    # pg.draw.line(self.screen, WIRE_COLOR_OFF, tuple(other_pos), rect.center, wire_width)
+                    render_wire(self.screen, other_pos, V2(*rect.center), WIRE_COLOR_OFF, wire_width)
 
     def draw_wiring_indicator(self):
         if self.wiring_widget is None: return
@@ -510,7 +511,8 @@ class LevelRunner:
 
         start = grid_to_px(self.level.board.find(self.editing_entity) + V2(0.5, 0.5))
         wire_width = self.camera.get_wire_width()
-        pg.draw.line(self.screen, WIRE_COLOR_OFF, tuple(start), tuple(self.mouse_pos), wire_width)
+        # pg.draw.line(self.screen, WIRE_COLOR_OFF, tuple(start), tuple(self.mouse_pos), wire_width)
+        render_wire(self.screen, start, self.mouse_pos, WIRE_COLOR_OFF, wire_width)
 
     def select_entity(self, entity):
         self.selected_entity = entity

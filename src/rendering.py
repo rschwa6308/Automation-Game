@@ -1,5 +1,6 @@
 from math import ceil, floor
 import pygame as pg
+from bezier_test import draw_ess_curve
 
 from engine import Board
 from entities import Entity, Wirable
@@ -61,6 +62,12 @@ class Camera:
     def get_wire_width(self):
         w = round(DEFAULT_WIRE_WIDTH * self.zoom_level)
         return clamp(w, MIN_GRID_LINE_WIDTH, MAX_GRID_LINE_WIDTH)
+
+
+
+def render_wire(surf, start, end, color, width):
+    draw_ess_curve(surf, start, end, color, width)
+
 
 
 def render_board(
@@ -142,7 +149,8 @@ def render_board(
                     # raise ValueError("unable to find desired entity while drawing wiring")
                 start, end = grid_to_px(pos + V2(0.5, 0.5)), grid_to_px(d_pos + V2(0.5, 0.5))
                 color = WIRE_COLOR_ON if e.port_states[i] else WIRE_COLOR_OFF
-                pg.draw.line(surf, color, tuple(start), tuple(end), wire_width)
+                # pg.draw.line(surf, color, tuple(start), tuple(end), wire_width)
+                render_wire(surf, start, end, color, wire_width)
 
 
 class SnapshotProvider:
