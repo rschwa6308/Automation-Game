@@ -8,7 +8,7 @@ from postprocessing import PostprocessingEffect
 from widgets import Widget, WireEditor
 from engine import Board, Level
 from rendering import Camera, DEFAULT_CELL_SIZE, SnapshotProvider, render_board
-from levels import test_level, test_level2, test_level3, minimal_level, new_test_level
+from levels import *
 from helpers import V2, draw_aapolygon, draw_rect_alpha, render_text_centered, clamp, wrap_text
 from constants import *
 
@@ -28,7 +28,11 @@ class LevelRunner:
         self.screen_width = DEFAULT_SCREEN_WIDTH
         self.screen_height = DEFAULT_SCREEN_HEIGHT
         self.shelf_height_onscreen = SHELF_HEIGHT
+
         self.editor_width_onscreen = 0
+        self.editor_content_height = None
+
+        self.editor_scroll_amt = 0
 
         self.keys_pressed = set()
         self.mouse_buttons_pressed = set()
@@ -118,6 +122,8 @@ class LevelRunner:
 
             # switch editing entity only when panel is closed or opening
             if self.editor_state in ("closed", "opening"):
+                if self.editing_entity is not self.selected_entity:
+                    self.editor_scroll_amt = 0      # reset scroll amount
                 self.editing_entity = self.selected_entity
                 self.editor_changed = True
             
@@ -279,17 +285,45 @@ class LevelRunner:
         #         self.viewport_changed = True
 
     def handle_mousebuttondown(self, button):
-        # handle camera zooming (scroll wheel)
-        zoom_direction = 0
-        if button == 4:    # zoom in
-            zoom_direction = 1
-        elif button == 5:   # zoom out
-            zoom_direction = -1
-        
-        if zoom_direction != 0:
-            pivot = self.camera.get_world_coords(self.mouse_pos, self.screen_width, self.screen_height)
-            self.camera.zoom(zoom_direction, pivot)
-            self.viewport_changed = True
+        mouse_over_shelf = self.mouse_pos.y >= self.screen_height - self.shelf_height_onscreen
+        mouse_over_editor = self.mouse_pos.x >= self.screen_width - self.editor_width_onscreen
+
+        # scroll wheel
+        if button in (4, 5):
+            if button == 4:
+                scroll_direction = 1
+            elif button == 5:
+                scroll_direction = -1
+            
+            # handle editor scrolling
+            editor_scrolled = False
+            if mouse_over_editor:
+                old_scroll_amt = self.editor_scroll_amt
+                self.editor_scroll_amt += scroll_direction * EDITOR_SCROLL_SPEED
+                min_scroll_amt = -(self.editor_content_height - self.editor_surf.get_height())
+                if min_scroll_amt > 0: min_scroll_amt = 0
+                # print("min_scroll_amt", min_scroll_amt)
+                self.editor_scroll_amt = clamp(self.editor_scroll_amt, min_scroll_amt, 0)
+                editor_scrolled = old_scroll_amt != self.editor_scroll_amt
+                if editor_scrolled:
+                    self.editor_changed = True
+            
+            # print(self.editor_scroll_amt)
+            
+            # # if unable to scroll editor, then zoom the camera
+            # if not editor_scrolled:
+            # if not over editor editor, then zoom the camera
+            if not mouse_over_editor:
+                zoom_direction = 0
+                if button == 4:    # zoom in
+                    zoom_direction = 1
+                elif button == 5:   # zoom out
+                    zoom_direction = -1
+                
+                if zoom_direction != 0:
+                    pivot = self.camera.get_world_coords(self.mouse_pos, self.screen_width, self.screen_height)
+                    self.camera.zoom(zoom_direction, pivot)
+                    self.viewport_changed = True
         
         # left click
         if button == 1:
@@ -306,8 +340,7 @@ class LevelRunner:
             clicked_wire_widget = False
 
             # handle entity holding (left click)
-            if self.mouse_pos.y >= self.screen_height - self.shelf_height_onscreen:
-                # cursor is over shelf
+            if mouse_over_shelf:
                 adjusted_pos = self.mouse_pos - V2(0, self.screen_height - self.shelf_height_onscreen)
                 for rect, e_prototype in self.palette_rects:
                     if rect.collidepoint(*adjusted_pos):
@@ -320,8 +353,7 @@ class LevelRunner:
                         self.select_entity(new)
                         self.shelf_changed = True
                         break
-            elif self.mouse_pos.x >= self.screen_width - self.editor_width_onscreen:
-                # cursor is over editor
+            elif mouse_over_editor:
                 if self.edit_mode:      # cannot interact with editor if not in edit mode
                     adjusted_pos = self.mouse_pos - V2(self.screen_width - self.editor_width_onscreen, 0)
                     for hitbox, widget in self.widget_rects:
@@ -333,8 +365,7 @@ class LevelRunner:
                             self.editor_changed = True      # just redraw every time (easier)
                             self.viewport_changed = True    # ^^^
                             break
-            else:
-                # cursor is over board
+            else:   # mouse is over board
                 pos_float = self.camera.get_world_coords(self.mouse_pos, self.screen_width, self.screen_height)
                 pos = pos_float.floor()
                 cell = self.level.board.get(*pos)
@@ -381,6 +412,9 @@ class LevelRunner:
             if self.held_entity is not None:
                 if self.mouse_pos.y >= self.screen_height - self.shelf_height_onscreen:
                     # cursor is over shelf
+                    # break all wiring connections
+                    if self.held_entity.has_ports:
+                        self.held_entity.break_all_connections()
                     self.level.palette.add(self.held_entity)
                     self.shelf_changed = True
                     self.held_entity = None
@@ -441,7 +475,8 @@ class LevelRunner:
         if self.editor_state == "closed" or self.editing_entity is None:
             return      # NoOp
 
-        y_pos = EDITOR_WIDGET_SPACING
+        y_pos = self.editor_scroll_amt
+        y_pos += EDITOR_WIDGET_SPACING
 
         # render header
         header_font_height = EDITOR_WIDTH / 8
@@ -479,6 +514,8 @@ class LevelRunner:
             w.draw_onto(self.editor_surf, rect, snapshot_provider=self.snapshot_provider)
             self.widget_rects.append((rect, w))
             y_pos += h + EDITOR_WIDGET_SPACING
+        
+        self.editor_content_height = y_pos - self.editor_scroll_amt
 
     def draw_held_entity(self):
         if self.held_entity is None: return
@@ -639,6 +676,6 @@ class LevelRunner:
 
 if __name__ == "__main__":
     # LevelRunner(new_test_level).run()
-    LevelRunner(test_level2).run()
+    LevelRunner(test_level5).run()
     # LevelRunner(test_level2, [BarrelDistortion]).run()
     # LevelRunner(minimal_level).run()

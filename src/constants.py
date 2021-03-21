@@ -49,5 +49,7 @@ DEFAULT_WIRE_WIDTH          = 4
 SHELF_ANIMATION_SPEED   = 15    # pixels per frame
 EDITOR_ANIMATION_SPEED  = 30    # pixels per frame
 
+EDITOR_SCROLL_SPEED     = 50    # pixels per scroll event
+
 LEVEL_SUBSTEP_INTERVAL = 500    # milliseconds
 FAST_FORWARD_FACTOR = 5

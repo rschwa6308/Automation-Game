@@ -116,6 +116,44 @@ test_level3 = Level(
 
 
 
+test_level4 = Level(
+    Board({
+        **random_flood((0, 0), 12, ResourceTile(Color.GREEN)),
+        (3, 5): [Target(Color.GREEN, count=10)],
+        (3, 10): [Target(Color.GREEN, count=10)],
+        (3, 15): [Target(Color.GREEN, count=10)],
+    }),
+    Palette([
+        (EntityPrototype(ResourceExtractor), 2),
+        (EntityPrototype(Sensor), 5),
+        (EntityPrototype(Piston), 3),
+        (EntityPrototype(AndGate), 2),
+        (EntityPrototype(OrGate), 2),
+        (EntityPrototype(NotGate), 2)
+    ])
+)
+
+
+
+test_level5 = Level(
+    Board({
+        **random_flood((0, -2), 12, ResourceTile(Color.RED_VIOLET)),
+        (4, 5): [Target(Color.RED_VIOLET, count=16)],
+        (4, 10): [Target(Color.RED_VIOLET, count=8)],
+        (4, 15): [Target(Color.RED_VIOLET, count=4)],
+        (4, 20): [Target(Color.RED_VIOLET, count=2)],
+        (4, 25): [Target(Color.RED_VIOLET, count=1)],
+    }),
+    Palette([
+        (EntityPrototype(ResourceExtractor), 2),
+        (EntityPrototype(PressurePlate), 6),
+        (EntityPrototype(Piston), 5),
+        (EntityPrototype(AndGate), 10),
+        (EntityPrototype(OrGate), 10),
+        (EntityPrototype(NotGate), 10)
+    ])
+)
+
 
 
 

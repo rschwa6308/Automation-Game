@@ -300,14 +300,36 @@ class Target(Carpet):
         )
 
 
+# TODO: maybe store input wirings and output wirings in separate lists
 class Wirable(Entity):
     has_ports = True
     editable = True
+    
+    # defaults, which can be overridden in child classes
+    min_num_inputs = 1
+    max_num_inputs = 1
+
+    min_num_outputs = 1
+    max_num_outputs = 3
 
     def __init__(self, locked: bool, **kwargs):
         super().__init__(locked, **kwargs)
-        self.wirings = []
-        self.port_states = []
+        # self.activated = None
+        
+        # min is default value
+        self.num_inputs = self.min_num_inputs
+        self.num_outputs = self.min_num_outputs
+
+        # format is [(is_input, other_entity, other_entity's wire_index)]
+        self.wirings: Sequence[Sequence[bool, Entity, int]] = [
+            [True, None, None] for _ in range(self.num_inputs)
+        ] + [
+            [False, None, None] for _ in range(self.num_outputs)
+        ]
+        self.port_states = [None for _ in self.wirings]
+        self.ports_visited = [False for _ in self.port_states]
+
+        self.update_widgets()
 
     def available_inputs(self) -> Collection[int]:
         res = []
@@ -341,21 +363,27 @@ class Wirable(Entity):
         self.wirings[i][1] = None
         self.wirings[i][2] = None
     
-    def clear_ports(self) -> None:
+    def break_all_connections(self):
+        for i in range(len(self.wirings)):
+            self.break_connection(i)
+    
+    def clear_ports_visited(self) -> None:
+        self.ports_visited =  [False for _ in self.port_states]
+
+    def clear_ports_states(self) -> None:
         self.port_states =  [None for _ in self.port_states]
     
     def resolve_port(self, i) -> bool:
         """resolves the given port by recursing backwards on inputs, and by calling `self.resolve_output_port` on outputs"""
         # use cached value (requires clearing before every round)
-        if self.port_states[i] not in (None, "visited"):
+        # if self.port_states[i] not in (None, "visited"):
+        # if self.port_states[i] not in ("visited", ):        # TESTING
+        #     return self.port_states[i]
+        if self.ports_visited[i]:
+            # print("CYCLE DETECTED IN WIRING GRAPH")
             return self.port_states[i]
-        
-        # check to see if node already visited - indicates a cycle in the wiring graph
-        if self.port_states[i] == "visited":
-            print("CYCLE DETECTED IN WIRING GRAPH")
-            res = False                         # for now, just set port to False
         else:
-            self.port_states[i] = "visited"
+            self.ports_visited[i] = True
             
             inp, other, j = self.wirings[i]
             if other is None:
@@ -380,6 +408,73 @@ class Wirable(Entity):
         """called immediately after all ports have been resolved; used for updating internal state"""
         pass
 
+    def update_widgets(self):
+        num_inputs_changable = self.max_num_inputs > self.min_num_inputs
+        num_outputs_changable = self.max_num_outputs > self.min_num_outputs
+
+        self.widgets = [
+            WireEditor(self, i, f"input {i + 1 if num_inputs_changable else ''}") for i in range(self.num_inputs)
+        ] + [
+            WireEditor(self, self.num_inputs + i, f"output {i + 1 if num_outputs_changable else ''}") for i in range(self.num_outputs)
+        ]
+
+        # if interval for num_inputs contains more than 1 possible value, add a MinusPlusButton
+        if num_inputs_changable:
+            mp_button = MinusPlusButton(
+                self, self.remove_input, self.add_input,
+                limits=[self.min_num_inputs, self.max_num_inputs],
+                attr="localvar:num_inputs"
+            )
+            i = self.num_inputs
+            self.widgets.insert(i, mp_button)
+            self.widgets.insert(i + 1, Spacing(20.0))
+        
+        # if interval for num_outputs contains more than 1 possible value, add a MinusPlusButton
+        if num_outputs_changable:
+            mp_button = MinusPlusButton(
+                self, self.remove_output, self.add_output,
+                limits=[self.min_num_outputs, self.max_num_outputs],
+                attr="localvar:num_outputs"
+            )
+            i = -1
+            self.widgets.append(mp_button)
+            self.widgets.append(Spacing(20.0))
+
+    def remove_input(self):
+        if self.num_inputs <= self.min_num_inputs: return
+        i = self.num_inputs - 1     # last input
+        # break the connection
+        self.break_connection(i)
+        self.wirings.pop(i)
+        self.port_states.pop(i)
+        self.num_inputs -= 1
+        self.update_widgets()
+
+    def add_input(self):
+        if self.num_inputs >= self.max_num_inputs: return
+        i = self.num_inputs
+        self.wirings.insert(i, [True, None, None])
+        self.port_states.insert(i, None)
+        self.num_inputs += 1
+        self.update_widgets()
+    
+    def remove_output(self):
+        if self.num_outputs <= self.min_num_outputs: return
+        i = -1                      # last output
+        # break the connection
+        self.break_connection(i)
+        self.wirings.pop(i)
+        self.port_states.pop(i)
+        self.num_outputs -= 1
+        self.update_widgets()
+
+    def add_output(self):
+        if self.num_outputs >= self.max_num_outputs: return
+        self.wirings.append([False, None, None])
+        self.port_states.append(None)
+        self.num_outputs += 1
+        self.update_widgets()
+
 
 class Piston(Block, Wirable):
     name = "Piston"
@@ -388,6 +483,9 @@ class Piston(Block, Wirable):
     
     max_amt = 0.75
 
+    min_num_outputs = 0
+    max_num_outputs = 0
+
     # boostpads are unlocked by default
     def __init__(self, orientation: Direction = Direction.NORTH, locked: bool = False, **kwargs):
         super().__init__(locked, **kwargs)
@@ -395,19 +493,6 @@ class Piston(Block, Wirable):
             raise ValueError("Piston orientation cannot be `Direction.NONE`")
         self.orientation = orientation
         self.activated = None
-        
-        # format is [(is_input, other_entity, other_entity's wire_index)]
-        self.wirings: Sequence[Sequence[bool, Entity, int]] = [
-            [True, None, None],
-            [False, None, None]
-        ]
-        self.port_states = [None for _ in self.wirings]
-
-        self.widgets = [
-            DirectionEditor(self, "localvar:orientation", "orientation"),
-            WireEditor(self, 0, "input"),
-            WireEditor(self, 1, "output"),
-        ]
     
     def resolve_output_port(self, i) -> bool:
         super().resolve_output_port(i)
@@ -469,6 +554,9 @@ class Sensor(Block, Wirable):
     ascii_str = "S"
     orients = True
 
+    min_num_inputs = 0
+    max_num_inputs = 0
+
     target_entity_type = Barrel
 
     def __init__(self, orientation: Direction = Direction.NORTH, locked: bool = False, **kwargs):
@@ -477,17 +565,6 @@ class Sensor(Block, Wirable):
             raise ValueError("Sensor orientation cannot be `Direction.NONE`")
         self.orientation = orientation
         self.activated = None
-        
-        # format is [(is_input, other_entity, other_entity's wire_index)]
-        self.wirings: Sequence[Sequence[bool, Entity, int]] = [
-            [False, None, None]
-        ]
-        self.port_states = [None for _ in self.wirings]
-
-        self.widgets = [
-            DirectionEditor(self, "localvar:orientation", "orientation"),
-            WireEditor(self, 0, "output"),
-        ]
     
     def resolve_output_port(self, i) -> bool:
         super().resolve_output_port(i)
@@ -526,59 +603,40 @@ class Sensor(Block, Wirable):
             pg.draw.line(surf, (0, 0, 0), tuple(start), tuple(end), width=round(draw_width/2))
 
 
+class PressurePlate(Wirable):
+    name = "Pressure Plate"
+    ascii_str = "PP"
+    orients = False
+
+    min_num_inputs = 0
+    max_num_inputs = 0
+
+    target_entity_type = Barrel
+
+    def __init__(self, locked: bool = False, **kwargs):
+        super().__init__(locked, **kwargs)
+        self.activated = None
+    
+    def resolve_output_port(self, i) -> bool:
+        super().resolve_output_port(i)
+        if self.activated is None:
+            raise RuntimeError("cannot read output value on a sensor that has not yet obtained a reading (check engine execution order)")
+        return self.activated
+
+    def draw_onto_base(self, surf: pg.Surface, rect: pg.Rect, edit_mode: bool, step_progress: float = 0.0, neighborhood = (([],) * 5,) * 5):
+        s = rect.width
+        padding = s * 0.2
+        br = padding / 2
+        pg.draw.rect(surf, (50, 50, 50), rect.inflate(-padding, -padding), border_radius=int(br))
+
+
+
 class Gate(Wirable):
     """abstract class defining the common behavior of all (single-output) logic gates"""
     orients = False
 
     min_num_inputs = 2
-    max_num_inputs = 5
-
-    def __init__(self, locked: bool = False, **kwargs):
-        super().__init__(locked, **kwargs)
-        self.activated = None
-        
-        self.num_inputs = self.min_num_inputs
-
-        # format is [(is_input, other_entity, other_entity's wire_index)]
-        self.wirings: Sequence[Sequence[bool, Entity, int]] = [
-            [True, None, None] for _ in range(self.num_inputs)
-        ] + [[False, None, None]]
-        self.port_states = [None for _ in self.wirings]
-
-        self.update_widgets()
-    
-    def update_widgets(self):
-        num_inputs_changable = self.max_num_inputs > self.min_num_inputs
-
-        self.widgets = [
-            WireEditor(self, i, f"input {i + 1 if num_inputs_changable else ''}") for i in range(self.num_inputs)
-        ] + [WireEditor(self, self.num_inputs, f"output")]
-
-        # if interval for num_inputs contains more than 1 possible value, add a MinusPlusButton
-        if num_inputs_changable:
-            mp_button = MinusPlusButton(
-                self, self.remove_input, self.add_input,
-                limits=[self.min_num_inputs, self.max_num_inputs],
-                attr="localvar:num_inputs"
-            )
-            self.widgets.insert(self.num_inputs, mp_button)
-            self.widgets.insert(self.num_inputs + 1, Spacing(20.0))
-
-    def remove_input(self):
-        if self.num_inputs <= self.min_num_inputs: return
-        # break the connection
-        self.break_connection(self.num_inputs - 1)
-        self.num_inputs -= 1
-        self.wirings.pop(-2)        # last input
-        self.port_states.pop(-2)
-        self.update_widgets()
-
-    def add_input(self):
-        if self.num_inputs >= self.max_num_inputs: return
-        self.num_inputs += 1
-        self.wirings.insert(-1, [True, None, None])
-        self.port_states.insert(-1, None)
-        self.update_widgets()
+    max_num_inputs = 5    
     
     def resolve_output_port(self, i) -> bool:
         super().resolve_output_port(i)
@@ -629,7 +687,7 @@ class NotGate(Gate):
 
 
 
-ENTITY_TYPES = [Barrel, Barrier, Boostpad, ResourceExtractor, ResourceTile, Target, Piston, Sensor, AndGate, OrGate, NotGate]
+ENTITY_TYPES = [Barrel, Barrier, Boostpad, ResourceExtractor, ResourceTile, Target, Piston, Sensor, PressurePlate, AndGate, OrGate, NotGate]
 # ENTITY_TYPES = all_subclasses(Entity)
 # print(ENTITY_TYPES)
 
@@ -639,6 +697,7 @@ class EntityPrototype:
     """a class for storing entity prototypes (e.g. in the palette)"""
     def __init__(self, entity_type, **kwargs):
         self.entity_type = entity_type
+        kwargs["locked"] = False
         self.kwargs = kwargs
 
     def get_instance(self):
