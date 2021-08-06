@@ -4,12 +4,13 @@ from math import floor, ceil
 import pygame as pg
 
 from entities import Entity, Wirable
+from modals import Modal
 from postprocessing import PostprocessingEffect
 from widgets import Widget, WireEditor
 from engine import Board, Level
 from rendering import Camera, DEFAULT_CELL_SIZE, SnapshotProvider, render_board
 from levels import *
-from helpers import V2, draw_aapolygon, draw_rect_alpha, render_text_centered, clamp, wrap_text
+from helpers import V2, draw_aapolygon, draw_rect_alpha, render_text_centered_x_wrapped, render_text_centered_xy, clamp
 from constants import *
 
 
@@ -19,7 +20,7 @@ class LevelRunner:
     #     pg.K_s: Direction.SOUTH,
     #     pg.K_a: Direction.WEST,
     #     pg.K_d: Direction.EAST
-    # }
+    # }A
 
     def __init__(self, level: Level, postprocessing_effects: Sequence[PostprocessingEffect]=[]):
         self.level = level
@@ -38,9 +39,13 @@ class LevelRunner:
         self.mouse_buttons_pressed = set()
         self.mouse_pos = V2(0, 0)
 
+        self.current_modal: Union[Modal, None] = None
+
         self.edit_mode = True
         self.paused = False
         self.fast_forward = False
+
+        self.slow_motion = False
 
         self.wiring_widget: Optional[WireEditor] = None     # if not None, the WireEditor that is currently being used
 
@@ -92,29 +97,14 @@ class LevelRunner:
         while self.running:
             clock.tick(TARGET_FPS)
 
-            # handle input
-            for event in pg.event.get():
-                if event.type == pg.QUIT:
-                    self.running = False
-                elif event.type == pg.VIDEORESIZE:
-                    self.handle_window_resize(event.w, event.h)
-                elif event.type == pg.KEYDOWN:
-                    self.keys_pressed.add(event.key)
-                    self.handle_keydown(event.key)
-                elif event.type == pg.KEYUP:
-                    self.keys_pressed.remove(event.key)
-                    self.handle_keyup(event.key)
-                elif event.type == pg.MOUSEBUTTONDOWN:
-                    self.mouse_buttons_pressed.add(event.button)
-                    self.handle_mousebuttondown(event.button)
-                elif event.type == pg.MOUSEBUTTONUP:
-                    self.mouse_buttons_pressed.remove(event.button)
-                    self.handle_mousebuttonup(event.button)
-                elif event.type == pg.MOUSEMOTION:
-                    self.mouse_pos = V2(*event.pos)
-                    self.handle_mousemotion(event.rel)
-            
-            self.handle_keys_pressed()
+            # fetch events
+            events = list(pg.event.get())
+
+            # pass events to any modals
+            if self.current_modal:
+                self.current_modal.handle_events(events)    # consumes events
+
+            self.handle_events(events)                      # consumes events
             
             # handle overlay animations
             self.handle_shelf_animation()
@@ -127,17 +117,27 @@ class LevelRunner:
                 self.editing_entity = self.selected_entity
                 self.editor_changed = True
             
+            # handle level win state
+            if self.level.won:
+                if self.current_modal is None:
+                    print("Level has been won, generating modal")
+                    self.generate_congrats_modal()
+            
             # handle level execution
             if not self.edit_mode and not self.paused:
-                interval = LEVEL_SUBSTEP_INTERVAL / (FAST_FORWARD_FACTOR if self.fast_forward else 1)
+                execution_speed_factor = 1.0
+
+                if self.fast_forward:
+                    execution_speed_factor *= FAST_FORWARD_FACTOR
+                
+                if self.slow_motion:
+                    execution_speed_factor *= SLOW_MOTION_FACTOR
+
+                interval = LEVEL_SUBSTEP_INTERVAL / execution_speed_factor
                 self.substep_progress += clock.get_time() / interval
                 if self.substep_progress >= 1.0:
                     self.substep_progress -= 1.0
                     self.level.substep()
-                    if self.level.won:
-                        # pass
-                        print("YOU WON!!!")
-                        # TODO: show congrats screen or something
                 self.viewport_changed = True
                 self.editor_changed = True      # needed for updating snapshots
 
@@ -178,17 +178,53 @@ class LevelRunner:
                 self.reblit_needed = False
                 # pg.display.update()
             
-                # apply postprocessing effects
-                for effect in self.postprocessing_effects:
-                    self.screen = effect.apply_effect(self.screen)
-                self.true_screen.blit(self.screen, (0, 0))
+            # handle modal rendering
+            if self.current_modal:
+                self.current_modal.draw_onto(self.screen)
+            
+            # apply postprocessing effects
+            for effect in self.postprocessing_effects:
+                self.screen = effect.apply_effect(self.screen)
+            self.true_screen.blit(self.screen, (0, 0))
 
-            # TEMPORARY
-            fps = round(clock.get_fps())
-            pg.draw.rect(self.true_screen, (0, 0, 0), pg.Rect(0, 0, 30, 30))
-            render_text_centered(str(fps), (255, 255, 255), self.true_screen, (15, 15), 25)
+            # # TEMPORARY
+            # fps = round(clock.get_fps())
+            # pg.draw.rect(self.true_screen, (0, 0, 0), pg.Rect(0, 0, 30, 30))
+            # render_text_centered(str(fps), (255, 255, 255), self.true_screen, (15, 15), 25)
+
             pg.display.update()
-                
+
+    def handle_events(self, events):
+        for event in events:
+            if event.type == pg.QUIT:
+                self.running = False
+            elif event.type == pg.VIDEORESIZE:
+                self.handle_window_resize(event.w, event.h)
+            elif event.type == pg.KEYDOWN:
+                # --------- TEMPORARY -------#
+                if event.key in (pg.K_RETURN, pg.K_KP_ENTER):
+                    self.level.won = True
+                    print("abcd")
+                # ---------------------------#
+                self.keys_pressed.add(event.key)
+                self.handle_keydown(event.key)
+            elif event.type == pg.KEYUP:
+                self.keys_pressed.discard(event.key)
+                self.handle_keyup(event.key)
+            elif event.type == pg.MOUSEBUTTONDOWN:
+                self.mouse_buttons_pressed.add(event.button)
+                self.handle_mousebuttondown(event.button)
+            elif event.type == pg.MOUSEBUTTONUP:
+                self.mouse_buttons_pressed.discard(event.button)
+                self.handle_mousebuttonup(event.button)
+            elif event.type == pg.MOUSEMOTION:
+                self.mouse_pos = V2(*event.pos)
+                self.handle_mousemotion(event.rel)
+        
+        self.handle_keys_pressed()
+
+        return set()    # we consume all events
+
     def handle_window_resize(self, new_width, new_height):
         self.screen_width = max(new_width, MIN_SCREEN_WIDTH)
         self.screen_height = max(new_height, MIN_SCREEN_HEIGHT)
@@ -201,6 +237,29 @@ class LevelRunner:
         self.editor_surf = pg.Surface((EDITOR_WIDTH, self.screen_height - SHELF_HEIGHT), pg.SRCALPHA)
         # self.editor_surf = pg.Surface((EDITOR_WIDTH, self.screen_height), pg.SRCALPHA)
 
+    def generate_congrats_modal(self):
+        self.deselect_entity()
+        self.fast_forward = False
+        self.slow_motion = True
+
+        def continue_func():
+            self.current_modal = None
+            self.level.won = False
+            self.slow_motion = False
+
+        def return_func():
+            self.toggle_playing()
+            self.level.won = False
+            self.current_modal = None
+            self.slow_motion = False
+
+        self.current_modal = Modal(
+            f"Congrats! You beat level {self.level.name}",
+            [
+                ("continue", continue_func),
+                ("return to editor", return_func)
+            ]
+        )
 
     def handle_shelf_animation(self):
         if self.shelf_state == "closing":
@@ -467,7 +526,7 @@ class LevelRunner:
                 temp_entity.draw_onto_base(self.shelf_surf, rect, edit_mode=True)
                 # pg.draw.rect(self.shelf_surf, (0, 255, 0), rect)
                 pg.draw.circle(self.shelf_surf, (255, 0, 0), rect.topright, 14)
-                render_text_centered(str(count), (255, 255, 255), self.shelf_surf, rect.topright, 20, bold=True)
+                render_text_centered_xy(str(count), (255, 255, 255), self.shelf_surf, rect.topright, 20, bold=True)
 
     def draw_editor(self):
         self.editor_surf.fill(EDITOR_BG_COLOR)
@@ -475,27 +534,33 @@ class LevelRunner:
         if self.editor_state == "closed" or self.editing_entity is None:
             return      # NoOp
 
-        y_pos = self.editor_scroll_amt
-        y_pos += EDITOR_WIDGET_SPACING
-
         # render header
-        header_font_height = EDITOR_WIDTH / 8
+        header_font_size = EDITOR_WIDTH / 8
         header_text = self.editing_entity.name
-        for word in wrap_text(header_text, 12):
-            render_text_centered(
-                word,
-                (0, 0, 0),
-                self.editor_surf,
-                (EDITOR_WIDTH // 2, y_pos + header_font_height // 2),
-                header_font_height,
-                bold=True
-            )
-            y_pos += header_font_height
+        header_rect = render_text_centered_x_wrapped(
+            header_text, (0, 0, 0), header_font_size,
+            self.editor_surf, (EDITOR_WIDTH/2, 0), EDITOR_WIDTH,
+            padding_top=EDITOR_WIDGET_SPACING,
+            bold=True
+        )
+        y_pos = header_rect.bottom
+
+        # header_font_height = EDITOR_WIDTH / 8
+        # for word in wrap_text(header_text, 12):
+        #     render_text_centered(
+        #         word,
+        #         (0, 0, 0),
+        #         self.editor_surf,
+        #         (EDITOR_WIDTH // 2, y_pos + header_font_height // 2),
+        #         header_font_height,
+        #         bold=True
+        #     )
+        #     y_pos += header_font_height
         
         # render read-only indicator
-        read_only_indicator_font_height = header_font_height / 2
+        read_only_indicator_font_height = header_font_size / 2
         if not self.edit_mode:
-            render_text_centered(
+            render_text_centered_xy(
                 "(read-only)",
                 (0, 0, 0),
                 self.editor_surf,
@@ -676,6 +741,6 @@ class LevelRunner:
 
 if __name__ == "__main__":
     # LevelRunner(new_test_level).run()
-    LevelRunner(test_level5).run()
+    LevelRunner(test_level2).run()
     # LevelRunner(test_level2, [BarrelDistortion]).run()
     # LevelRunner(minimal_level).run()

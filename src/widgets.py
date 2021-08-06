@@ -2,7 +2,7 @@
 from typing import Callable, Tuple, Union
 import pygame as pg
 
-from helpers import V2, Direction, clamp, draw_aacircle, draw_chevron, draw_rectangle, rect_union, render_text_centered, render_text_left_justified
+from helpers import V2, Direction, clamp, draw_aacircle, draw_chevron, draw_rectangle, rect_union, render_text_centered_xy, render_text_left_justified
 from constants import EDITOR_WIDTH, HIGHLIGHT_COLOR
 
 FONT_SIZE = EDITOR_WIDTH / 11
@@ -82,7 +82,7 @@ class DirectionEditor(AttrEditor):
             for d in Direction
             if d is not Direction.NONE
         ]
-        render_text_centered(self.label, (0, 0, 0), surf, V2(rect.centerx, rect.bottom - s * 0.16), FONT_SIZE)
+        render_text_centered_xy(self.label, (0, 0, 0), surf, V2(rect.centerx, rect.bottom - s * 0.16), FONT_SIZE)
     
     def handle_click(self, pos: V2):
         for d, hitbox in self.hitboxes:
@@ -132,7 +132,7 @@ class SmallIntEditor(AttrEditor):
             )
             color = (255, 255, 255) if n == self.get_value() else (0, 0, 0)
             draw_rectangle(surf, box, (0, 0, 0), thickness=box_thickness)
-            render_text_centered(str(n), color, surf, box.center, FONT_SIZE)
+            render_text_centered_xy(str(n), color, surf, box.center, FONT_SIZE)
             self.hitboxes.append((n, box))
     
     def handle_click(self, pos: V2) -> None:
@@ -183,11 +183,11 @@ class WireEditor(Widget):
 
         if self.get_value()[0] is None and not self.in_use:
             size = FONT_SIZE * 0.65
-            render_text_centered(
+            render_text_centered_xy(
                 "not", (63, 63, 63), surf,
                 (self.snapshot_rect.centerx, self.snapshot_rect.centery - size/2), size
             )
-            render_text_centered(
+            render_text_centered_xy(
                 "connected", (63, 63, 63), surf,
                 (self.snapshot_rect.centerx, self.snapshot_rect.centery + size/2), size
             )
@@ -294,11 +294,11 @@ class MinusPlusButton(Widget):
 
         # draw "-" button
         if minus_visible:
-            render_text_centered("-", icon_color, surf, self.minus_hitbox.center, icon_font_size)
+            render_text_centered_xy("-", icon_color, surf, self.minus_hitbox.center, icon_font_size)
 
         # draw "+" button
         if plus_visible:
-            render_text_centered("+", icon_color, surf, self.plus_hitbox.center, icon_font_size)
+            render_text_centered_xy("+", icon_color, surf, self.plus_hitbox.center, icon_font_size)
 
         # draw divider
         if minus_visible and plus_visible:

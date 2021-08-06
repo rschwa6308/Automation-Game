@@ -9,7 +9,7 @@ import pygame.freetype
 import pygame.gfxdraw
 from pygame.transform import threshold
 
-from helpers import V2, Direction, all_subclasses, draw_aacircle, draw_chevron, draw_rectangle, render_text_centered, interpolate_colors, sgn
+from helpers import V2, Direction, all_subclasses, draw_aacircle, draw_chevron, draw_rectangle, render_text_centered_xy, interpolate_colors, sgn
 from colors import Color
 from widgets import DirectionEditor, MinusPlusButton, SmallIntEditor, Spacing, Widget, WireEditor
 from constants import *
@@ -291,7 +291,7 @@ class Target(Carpet):
         padding = s * 0.35
         radius = round(s * 0.2)
         pg.draw.rect(surf, (255, 255, 255), rect.inflate(-padding, -padding), border_radius=radius)
-        render_text_centered(
+        render_text_centered_xy(
             str(self.count),
             (0, 0, 0),
             surf,
@@ -652,7 +652,7 @@ class Gate(Wirable):
         super().draw_onto_base(surf, rect, edit_mode, step_progress=step_progress, neighborhood=neighborhood)
         font_size = rect.width * 0.3
         text = self.name.split()[0]     # gate type
-        render_text_centered(text, (0, 0, 0), surf, rect.center, font_size, bold=True)
+        render_text_centered_xy(text, (0, 0, 0), surf, rect.center, font_size, bold=True)
 
 
 class AndGate(Gate):

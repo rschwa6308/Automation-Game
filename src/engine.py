@@ -182,7 +182,8 @@ class Level:
     def __init__(
         self,
         board: Board = None,
-        palette: Palette = None
+        palette: Palette = None,
+        name=None
     ):
         if board is None:
             board = Board()
@@ -190,8 +191,11 @@ class Level:
         if palette is None:
             palette = Palette()
 
+
         self.board = board
         self.palette = palette
+
+        self.name = name or "<unknown>"
 
         self.starting_state: Tuple[Board, Palette] = (deepcopy(board), deepcopy(palette))
 
