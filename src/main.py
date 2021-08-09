@@ -204,7 +204,7 @@ class LevelRunner:
                 # --------- TEMPORARY -------#
                 if event.key in (pg.K_RETURN, pg.K_KP_ENTER):
                     self.level.won = True
-                    print("abcd")
+                    print("FORCING LEVEL WIN")
                 # ---------------------------#
                 self.keys_pressed.add(event.key)
                 self.handle_keydown(event.key)
@@ -248,16 +248,21 @@ class LevelRunner:
             self.slow_motion = False
 
         def return_func():
-            self.toggle_playing()
+            if not self.edit_mode:
+                self.toggle_playing()
             self.level.won = False
             self.current_modal = None
             self.slow_motion = False
+        
+        def quit_func():
+            self.running = False
 
         self.current_modal = Modal(
             f"Congrats! You beat level {self.level.name}",
             [
                 ("continue", continue_func),
-                ("return to editor", return_func)
+                ("return to editor", return_func),
+                ("quit", quit_func)
             ]
         )
 
@@ -420,7 +425,7 @@ class LevelRunner:
                             clicked_wire_widget = widget.handle_click(adjusted_pos)
                             if clicked_wire_widget:
                                 self.finish_wiring(None)    # deselect previously selected wire widget
-                                self.wiring_widget = widget
+                                self.wiring_widget = clicked_wire_widget
                             self.editor_changed = True      # just redraw every time (easier)
                             self.viewport_changed = True    # ^^^
                             break
@@ -574,7 +579,7 @@ class LevelRunner:
         y_pos += EDITOR_WIDGET_SPACING
         self.widget_rects.clear()
         for w in self.editing_entity.widgets:
-            h = EDITOR_WIDTH / w.aspect_ratio
+            h = EDITOR_WIDTH / w.aspect_ratio if w.aspect_ratio else 9999
             rect = pg.Rect(0, y_pos, EDITOR_WIDTH, h)
             w.draw_onto(self.editor_surf, rect, snapshot_provider=self.snapshot_provider)
             self.widget_rects.append((rect, w))
