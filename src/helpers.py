@@ -121,7 +121,7 @@ def render_text_centered_x_wrapped(
     padding_top=0, padding_bottom=0, padding_sides=0, **kwargs
 ):
     line_width_chars = (line_width_px - padding_sides*2) // (font_size/2)
-    line_height_px = round(font_size * 1.1)
+    line_height_px = font_size  # round(font_size * 1.1)
     lines = wrap_text(text, line_width_chars)
 
     total_text_height = line_height_px * len(lines)
@@ -144,7 +144,7 @@ def render_text_centered_xy_wrapped(
     padding_top=0, padding_bottom=0, padding_sides=0, **kwargs
 ):
     line_width_chars = (line_width_px - padding_sides*2) // (font_size/2)
-    line_height_px = round(font_size * 1.1)
+    line_height_px = font_size  # round(font_size * 1.1)
     lines = wrap_text(text, line_width_chars)
 
     total_text_height = line_height_px * len(lines)

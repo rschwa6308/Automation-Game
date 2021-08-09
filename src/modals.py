@@ -40,12 +40,13 @@ class Modal:
 
         # draw message
         render_text_centered_x_wrapped(
-            self.message, MODAL_PRIMARY_COLOR, 30,
+            self.message, MODAL_PRIMARY_COLOR, 35,
             screen, modal_rect.midtop, modal_rect.width,
             padding_top=100, padding_sides=30
         )
 
         # draw buttons
+        # TODO: refactor these as proper Widgets
         button_margin_sides = 30
         button_margin_top = 5
         button_margin_bottom = 5
@@ -83,6 +84,8 @@ class Modal:
                     if button_rect.collidepoint(event.pos):
                         self.button_id_hovered = i
                         break
+                else:
+                    self.button_id_hovered = None
                 events.remove(event)
 
 
