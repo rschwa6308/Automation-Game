@@ -225,7 +225,7 @@ class ResourceExtractor(Block):
         self.widgets = [
             DirectionEditor(self, "localvar:orientation", "orientation"),
             # Spacing(20.0),
-            SmallIntEditor(self, "localvar:period", (1, 5), "period"),
+            SmallIntEditor(self, "localvar:period", (2, 5), "period"),      # TODO: decide on the bounds
             SmallIntEditor(self, "localvar:phase", (1, "localvar:period"), "phase"),
         ]
     

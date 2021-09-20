@@ -1,5 +1,5 @@
 # --- Rendering and UI --- #
-from typing import Union, Type, Sequence, Tuple, Optional
+from typing import List, Union, Type, Sequence, Tuple, Optional
 from math import floor, ceil
 import pygame as pg
 
@@ -22,24 +22,34 @@ class LevelRunner:
     #     pg.K_d: Direction.EAST
     # }A
 
-    def __init__(self, level: Level, postprocessing_effects: Sequence[PostprocessingEffect]=[]):
-        self.level = level
+    def __init__(self, level_queue: List[Level], postprocessing_effects: Sequence[PostprocessingEffect]=[]):
+        self.level_queue = level_queue
         self.postprocessing_effects = postprocessing_effects
 
         self.screen_width = DEFAULT_SCREEN_WIDTH
         self.screen_height = DEFAULT_SCREEN_HEIGHT
-        self.shelf_height_onscreen = SHELF_HEIGHT
 
-        self.editor_width_onscreen = 0
-        self.editor_content_height = None
-
-        self.editor_scroll_amt = 0
+        self.advance_level()
 
         self.keys_pressed = set()
         self.mouse_buttons_pressed = set()
         self.mouse_pos = V2(0, 0)
 
-        self.current_modal: Union[Modal, None] = None
+        self.palette_rects: Sequence[Tuple[pg.Rect, Type[Entity]]]  = []    # store palette item rects for easier collision
+        self.widget_rects: Sequence[Tuple[pg.Rect, Widget]]         = []    # store widget rects for easier collision
+        self.shelf_icon_rects: Sequence[Tuple[pg.Rect, str]]        = []    # store shelf icon rects for easier collision
+
+        self.snapshot_provider = SnapshotProvider(self)
+
+    def advance_level(self):
+        if not self.level_queue:
+            raise RuntimeError("Cannot advance to next level; Error queue is empty!")
+
+        self.level, *self.level_queue = self.level_queue
+        self.reset_level()
+
+    def reset_level(self):
+        self.shelf_height_onscreen = SHELF_HEIGHT
 
         self.edit_mode = True
         self.paused = False
@@ -49,22 +59,27 @@ class LevelRunner:
 
         self.wiring_widget: Optional[WireEditor] = None     # if not None, the WireEditor that is currently being used
 
-        self.shelf_state = "open"       # "open", "closed", "opening", or "closing"
-        self.editor_state = "closed"    # "open", "closed", "opening", or "closing"
+        self.shelf_state = "open"           # "open", "closed", "opening", or "closing"
+        self.editor_state = "closed"        # "open", "closed", "opening", or "closing"
         self.editor_state_queue = []
-        self.substep_progress = 0.0        # float in [0, 1) denoting fraction of current step completed (for animation)
+        self.substep_progress = 0.0         # float in [0, 1) denoting fraction of current step completed (for animation)
+
+        self.editor_width_onscreen = 0
+        self.editor_content_height = None
+
+        self.editor_scroll_amt = 0
 
         # initialize camera to contain `level.board` (with some margin)
-        rect = level.board.get_bounding_rect(margin=3)   # arbitrary value
+        rect = self.level.board.get_bounding_rect(margin=3)   # arbitrary value
         zoom_level = min(self.screen_width / rect.width, self.screen_height / rect.height) / DEFAULT_CELL_SIZE
         self.camera = Camera(center=V2(*rect.center), zoom_level=zoom_level)
 
         # initialize refresh sentinels
-        self.window_size_changed    = False
-        self.viewport_changed       = False
-        self.shelf_changed          = False
-        self.editor_changed         = False
-        self.reblit_needed          = False
+        self.window_size_changed    = True
+        self.viewport_changed       = True
+        self.shelf_changed          = True
+        self.editor_changed         = True
+        self.reblit_needed          = True
 
         self.held_entity: Union[Entity, None] = None
         self.hold_point: V2 = V2(0, 0)  # in [0, 1]^2
@@ -75,11 +90,8 @@ class LevelRunner:
 
         self.pressed_icon: Optional[str] = None
 
-        self.palette_rects: Sequence[Tuple[pg.Rect, Type[Entity]]]  = []    # store palette item rects for easier collision
-        self.widget_rects: Sequence[Tuple[pg.Rect, Widget]]         = []    # store widget rects for easier collision
-        self.shelf_icon_rects: Sequence[Tuple[pg.Rect, str]]        = []    # store shelf icon rects for easier collision
+        self.current_modal: Union[Modal, None] = None
 
-        self.snapshot_provider = SnapshotProvider(self)
 
     def run(self):
         """run the level in a resizable window at `TARGET_FPS`"""
@@ -242,10 +254,10 @@ class LevelRunner:
         self.fast_forward = False
         self.slow_motion = True
 
-        def continue_func():
-            self.current_modal = None
-            self.level.won = False
-            self.slow_motion = False
+        # def continue_func():
+        #     self.current_modal = None
+        #     self.level.won = False
+        #     self.slow_motion = False
 
         def return_func():
             if not self.edit_mode:
@@ -253,18 +265,20 @@ class LevelRunner:
             self.level.won = False
             self.current_modal = None
             self.slow_motion = False
-        
+
         def quit_func():
             self.running = False
 
-        self.current_modal = Modal(
-            f"Congrats! You beat level {self.level.name}",
-            [
-                ("continue", continue_func),
-                ("return to editor", return_func),
-                ("quit", quit_func)
-            ]
-        )
+        buttons = [
+            # ("continue current level", continue_func),
+            ("return to editor", return_func),
+            ("quit", quit_func)
+        ]
+
+        if self.level_queue:
+            buttons.insert(0, ("next level", self.advance_level))
+
+        self.current_modal = Modal(f"Congrats! You beat {self.level.name}", buttons)
 
     def handle_shelf_animation(self):
         if self.shelf_state == "closing":
@@ -746,6 +760,6 @@ class LevelRunner:
 
 if __name__ == "__main__":
     # LevelRunner(new_test_level).run()
-    LevelRunner(test_level2).run()
+    LevelRunner([level_1, level_2, level_3, level_4, level_5, level_6]).run()
     # LevelRunner(test_level2, [BarrelDistortion]).run()
     # LevelRunner(minimal_level).run()

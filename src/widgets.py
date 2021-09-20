@@ -117,6 +117,9 @@ class SmallIntEditor(AttrEditor):
 
     def draw_onto(self, surf: pg.Surface, rect: pg.Rect, **kwargs):
         super().draw_onto(surf, rect)
+        
+        self.set_value(clamp(self.get_value(), *self.get_limits()))
+
         render_text_left_justified(self.label, (0, 0, 0), surf, V2(rect.left + rect.width * 0.03, rect.centery), FONT_SIZE)
         # TODO: draw number selector boxes
         box_width = int(rect.height * 0.75)
@@ -289,6 +292,7 @@ class MinusPlusButton(Widget):
         icon_font_size = FONT_SIZE * 1.0
 
         # draw background and border
+        # TODO: antialising!!!
         combined_rect = rect_union([self.minus_hitbox, self.plus_hitbox])
         pg.draw.rect(surf, background_color, combined_rect, border_radius=radius)
         pg.draw.rect(surf, border_color, combined_rect, width=border_width, border_radius=radius)
@@ -426,3 +430,7 @@ class WiringContainer(Widget):
         self.entity.port_states.append(None)
         self.entity.num_outputs += 1
         self.update_subwidgets()
+
+
+# TODO
+# - a period+phase combo editor where we show a circle (or maybe an annulus) subdivided into `period` segments, one of which must be selected
