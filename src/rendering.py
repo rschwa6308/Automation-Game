@@ -130,7 +130,7 @@ def render_board(
         )
     
     # draw wires
-    # TODO: make wire appearance change when ON or OFF
+    # TODO: antialias lines
     if wiring_visible:
         wire_width = cam.get_wire_width()
         for pos, e in board.get_all(filter_type=Wirable):
