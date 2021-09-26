@@ -310,7 +310,7 @@ class Wirable(Entity):
     max_num_inputs = 1
 
     min_num_outputs = 1
-    max_num_outputs = 3
+    max_num_outputs = 30    # TESTING
 
     def __init__(self, locked: bool, **kwargs):
         super().__init__(locked, **kwargs)

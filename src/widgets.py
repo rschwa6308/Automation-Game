@@ -327,6 +327,7 @@ class WiringContainer(Widget):
     ):
         # HACK to avoid circular-import
         from entities import Wirable
+
         if not isinstance(entity, Wirable):
             raise ValueError(f"WiringContainer cannot be bound to non-wirable entity: {self.entity}")
 
@@ -354,11 +355,13 @@ class WiringContainer(Widget):
         y_pos = rect.top
         y_pos += EDITOR_WIDGET_SPACING
         for w in self.subwidgets:
-            h = EDITOR_WIDTH / w.aspect_ratio
+            h = EDITOR_WIDTH // w.aspect_ratio
             subrect = pg.Rect(0, y_pos, EDITOR_WIDTH, h)
             w.draw_onto(surf, subrect, snapshot_provider=snapshot_provider)
             self.subwidget_rects.append((subrect, w))
             y_pos += h + EDITOR_WIDGET_SPACING
+        
+        return y_pos - rect.top     # return the height of the resulting rect
     
     def update_subwidgets(self):
         num_inputs, num_outputs = self.entity.num_inputs, self.entity.num_outputs

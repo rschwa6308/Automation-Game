@@ -378,13 +378,14 @@ class LevelRunner:
             # handle editor scrolling
             editor_scrolled = False
             if mouse_over_editor:
-                print("scrolling")
                 old_scroll_amt = self.editor_scroll_amt
                 self.editor_scroll_amt += scroll_direction * EDITOR_SCROLL_SPEED
-                min_scroll_amt = -(self.editor_content_height - self.editor_surf.get_height())
-                if min_scroll_amt > 0: min_scroll_amt = 0
+                max_scroll_amt = self.editor_content_height - self.editor_surf.get_height()
+                if max_scroll_amt < 0: max_scroll_amt = 0
                 # print("min_scroll_amt", min_scroll_amt)
-                self.editor_scroll_amt = clamp(self.editor_scroll_amt, min_scroll_amt, 0)
+                print("max scroll amt", max_scroll_amt)
+                self.editor_scroll_amt = clamp(self.editor_scroll_amt, -max_scroll_amt, 0)
+                print("scrolling", self.editor_scroll_amt)
                 editor_scrolled = old_scroll_amt != self.editor_scroll_amt
                 if editor_scrolled:
                     self.editor_changed = True
@@ -560,19 +561,21 @@ class LevelRunner:
         if self.editor_state == "closed" or self.editing_entity is None:
             return      # NoOp
 
+        y_pos = self.editor_scroll_amt
+
         # render header
-        header_font_size = EDITOR_WIDTH / 8
+        header_font_size = EDITOR_WIDTH // 8
         header_text = self.editing_entity.name
         header_rect = render_text_centered_x_wrapped(
             header_text, (0, 0, 0), header_font_size,
-            self.editor_surf, (EDITOR_WIDTH/2, 0), EDITOR_WIDTH,
+            self.editor_surf, (EDITOR_WIDTH/2, y_pos), EDITOR_WIDTH,
             padding_top=EDITOR_WIDGET_SPACING,
             bold=True
         )
-        y_pos = header_rect.bottom
+        y_pos += header_rect.bottom
         
         # render read-only indicator
-        read_only_indicator_font_height = header_font_size / 2
+        read_only_indicator_font_height = header_font_size // 2
         if not self.edit_mode:
             # blink red when timing variable is set
             blink = (self.read_only_indicator_blink_frames // (BLINK_DURATION // 2)) % 2 == 1
@@ -592,12 +595,16 @@ class LevelRunner:
         y_pos += EDITOR_WIDGET_SPACING
         self.widget_rects.clear()
         for w in self.editing_entity.widgets:
-            h = EDITOR_WIDTH / w.aspect_ratio if w.aspect_ratio else 9999
+            h = EDITOR_WIDTH // w.aspect_ratio if w.aspect_ratio else 9999
             rect = pg.Rect(0, y_pos, EDITOR_WIDTH, h)
-            w.draw_onto(self.editor_surf, rect, snapshot_provider=self.snapshot_provider)
+            real_h = w.draw_onto(self.editor_surf, rect, snapshot_provider=self.snapshot_provider)
+            if real_h:
+                h = real_h
+                rect.height = real_h
             self.widget_rects.append((rect, w))
             y_pos += h + EDITOR_WIDGET_SPACING
         
+        # TODO: debug this
         self.editor_content_height = y_pos - self.editor_scroll_amt
 
     def draw_held_entity(self):
