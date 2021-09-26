@@ -34,6 +34,7 @@ MODAL_MAT_COLOR             = (0, 0, 0, 127)        # 1/2 opaque
 MODAL_BG_COLOR              = (255, 255, 255)
 MODAL_PRIMARY_COLOR         = (0, 0, 0) # (63, 63, 63)
 MODAL_HIGHLIGHT_COLOR       = (191, 191, 191)
+WARNING_COLOR               = (179, 58, 58)         # e.g. blinking read-only indicator
 
 
 # Rendering-Related Constants
@@ -60,3 +61,5 @@ EDITOR_SCROLL_SPEED     = 50    # pixels per scroll event
 LEVEL_SUBSTEP_INTERVAL  = 500   # milliseconds
 FAST_FORWARD_FACTOR     = 5
 SLOW_MOTION_FACTOR      = 0.2
+
+BLINK_DURATION          = 20    # frames (for full on/off cycle)

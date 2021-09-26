@@ -87,6 +87,19 @@ level_6 = Level(
     name="Level 6"
 )
 
+level_7 = Level(
+    Board({
+        **random_flood((0, 0), 10, ResourceTile(Color.BLUE_GREEN)),
+        (8, -8): [Target(Color.BLUE_GREEN, count=10)],
+    }),
+    Palette([
+        (EntityPrototype(ResourceExtractor), 1),
+        (EntityPrototype(Sensor), 1),
+        (EntityPrototype(Piston), 1),
+    ]),
+    name="Level 7"
+)
+
 
 # TODO
 # - intro to sensors & pistons

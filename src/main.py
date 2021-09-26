@@ -68,6 +68,7 @@ class LevelRunner:
         self.editor_content_height = None
 
         self.editor_scroll_amt = 0
+        self.read_only_indicator_blink_frames = 0
 
         # initialize camera to contain `level.board` (with some margin)
         rect = self.level.board.get_bounding_rect(margin=3)   # arbitrary value
@@ -364,7 +365,8 @@ class LevelRunner:
 
     def handle_mousebuttondown(self, button):
         mouse_over_shelf = self.mouse_pos.y >= self.screen_height - self.shelf_height_onscreen
-        mouse_over_editor = self.mouse_pos.x >= self.screen_width - self.editor_width_onscreen
+        mouse_over_editor = self.mouse_pos.x >= self.screen_width - self.editor_width_onscreen \
+                            and self.mouse_pos.y < self.screen_height - SHELF_HEIGHT
 
         # scroll wheel
         if button in (4, 5):
@@ -376,6 +378,7 @@ class LevelRunner:
             # handle editor scrolling
             editor_scrolled = False
             if mouse_over_editor:
+                print("scrolling")
                 old_scroll_amt = self.editor_scroll_amt
                 self.editor_scroll_amt += scroll_direction * EDITOR_SCROLL_SPEED
                 min_scroll_amt = -(self.editor_content_height - self.editor_surf.get_height())
@@ -410,6 +413,7 @@ class LevelRunner:
                 if rect.collidepoint(*self.mouse_pos):
                     self.pressed_icon = icon
                     self.reblit_needed = True
+                    return
             
             # if not self.edit_mode:
             #     return
@@ -443,6 +447,9 @@ class LevelRunner:
                             self.editor_changed = True      # just redraw every time (easier)
                             self.viewport_changed = True    # ^^^
                             break
+                else:   # if not in edit mode, trigger read-only indicator to blink
+                    if self.read_only_indicator_blink_frames == 0:                      # if not currently blinking
+                        self.read_only_indicator_blink_frames = 2 * BLINK_DURATION      # blink twice
             else:   # mouse is over board
                 pos_float = self.camera.get_world_coords(self.mouse_pos, self.screen_width, self.screen_height)
                 pos = pos_float.floor()
@@ -499,7 +506,7 @@ class LevelRunner:
                     self.deselect_entity()
                 else:
                     # cursor is over board
-                    pos = (self.camera.get_world_coords(self.mouse_pos, self.screen_width, self.screen_height)).floor()
+                    pos = self.camera.get_world_coords(self.mouse_pos, self.screen_width, self.screen_height).floor()
                     # drop entity
                     self.level.board.insert(*pos, self.held_entity)
                     # select entity that was just dropped
@@ -563,25 +570,17 @@ class LevelRunner:
             bold=True
         )
         y_pos = header_rect.bottom
-
-        # header_font_height = EDITOR_WIDTH / 8
-        # for word in wrap_text(header_text, 12):
-        #     render_text_centered(
-        #         word,
-        #         (0, 0, 0),
-        #         self.editor_surf,
-        #         (EDITOR_WIDTH // 2, y_pos + header_font_height // 2),
-        #         header_font_height,
-        #         bold=True
-        #     )
-        #     y_pos += header_font_height
         
         # render read-only indicator
         read_only_indicator_font_height = header_font_size / 2
         if not self.edit_mode:
+            # blink red when timing variable is set
+            blink = (self.read_only_indicator_blink_frames // (BLINK_DURATION // 2)) % 2 == 1
+            color = WARNING_COLOR if blink else (0, 0, 0)
+            self.read_only_indicator_blink_frames = max(self.read_only_indicator_blink_frames - 1, 0)
             render_text_centered_xy(
                 "(read-only)",
-                (0, 0, 0),
+                color,
                 self.editor_surf,
                 (EDITOR_WIDTH // 2, y_pos + read_only_indicator_font_height // 2 + 4),  # pad down just a little extra
                 read_only_indicator_font_height,
@@ -760,6 +759,6 @@ class LevelRunner:
 
 if __name__ == "__main__":
     # LevelRunner(new_test_level).run()
-    LevelRunner([level_1, level_2, level_3, level_4, level_5, level_6]).run()
+    LevelRunner([level_1, level_2, level_3, level_4, level_5, level_6, level_7]).run()
     # LevelRunner(test_level2, [BarrelDistortion]).run()
     # LevelRunner(minimal_level).run()

@@ -205,8 +205,8 @@ class Level:
         self.substeps = [
             [
                 self.apply_merges, self.apply_rotations, self.apply_targets, self.check_won,            # clean up pistons
-                # self.reset_wiring_network, self.apply_resource_extractors, self.apply_translations      # main motion step
-                self.apply_resource_extractors, self.apply_translations                                 # main motion step (no wiring reset)
+                self.reset_wiring_network, self.apply_resource_extractors, self.apply_translations      # main motion step
+                # self.apply_resource_extractors, self.apply_translations                                 # main motion step (no wiring reset)
             ], [
                 self.apply_merges, self.apply_sensors, self.resolve_wiring_network, self.apply_pistons  # 'reactive' electronics and whatnot step
             ]
