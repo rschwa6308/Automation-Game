@@ -379,18 +379,15 @@ class LevelRunner:
             editor_scrolled = False
             if mouse_over_editor:
                 old_scroll_amt = self.editor_scroll_amt
-                self.editor_scroll_amt += scroll_direction * EDITOR_SCROLL_SPEED
                 max_scroll_amt = self.editor_content_height - self.editor_surf.get_height()
                 if max_scroll_amt < 0: max_scroll_amt = 0
-                # print("min_scroll_amt", min_scroll_amt)
-                print("max scroll amt", max_scroll_amt)
-                self.editor_scroll_amt = clamp(self.editor_scroll_amt, -max_scroll_amt, 0)
-                print("scrolling", self.editor_scroll_amt)
+                self.editor_scroll_amt = clamp(
+                    self.editor_scroll_amt + scroll_direction * EDITOR_SCROLL_SPEED, 
+                    -max_scroll_amt, 0
+                )
                 editor_scrolled = old_scroll_amt != self.editor_scroll_amt
                 if editor_scrolled:
                     self.editor_changed = True
-            
-            # print(self.editor_scroll_amt)
             
             # # if unable to scroll editor, then zoom the camera
             # if not editor_scrolled:
@@ -568,11 +565,11 @@ class LevelRunner:
         header_text = self.editing_entity.name
         header_rect = render_text_centered_x_wrapped(
             header_text, (0, 0, 0), header_font_size,
-            self.editor_surf, (EDITOR_WIDTH/2, y_pos), EDITOR_WIDTH,
+            self.editor_surf, (EDITOR_WIDTH//2, y_pos), EDITOR_WIDTH,
             padding_top=EDITOR_WIDGET_SPACING,
             bold=True
         )
-        y_pos += header_rect.bottom
+        y_pos += header_rect.height
         
         # render read-only indicator
         read_only_indicator_font_height = header_font_size // 2
@@ -595,7 +592,7 @@ class LevelRunner:
         y_pos += EDITOR_WIDGET_SPACING
         self.widget_rects.clear()
         for w in self.editing_entity.widgets:
-            h = EDITOR_WIDTH // w.aspect_ratio if w.aspect_ratio else 9999
+            h = int(EDITOR_WIDTH / w.aspect_ratio) if w.aspect_ratio else 9999
             rect = pg.Rect(0, y_pos, EDITOR_WIDTH, h)
             real_h = w.draw_onto(self.editor_surf, rect, snapshot_provider=self.snapshot_provider)
             if real_h:
@@ -621,11 +618,21 @@ class LevelRunner:
 
         # draw wiring while moving entity
         if self.held_entity.has_ports:
+            e = self.held_entity
             wire_width = self.camera.get_wire_width()
-            for _, other, _ in self.held_entity.wirings:
-                if other is not None:
-                    other_pos = grid_to_px(self.level.board.find(other) + V2(0.5, 0.5))
-                    pg.draw.line(self.screen, WIRE_COLOR_OFF, tuple(other_pos), rect.center, wire_width)
+            for index, (is_input, f, f_index) in enumerate(e.wirings):
+                if f is None: continue
+                f_pos = self.level.board.find(f)
+                if f_pos is None:
+                    continue
+                    # raise RuntimeError("unable to find desired entity while drawing wiring")
+                
+                start_offset = e.get_port_offset(is_input, index)
+                end_offset = f.get_port_offset(not is_input, f_index)
+                start = V2(*rect.topleft) + V2(rect.width * start_offset[0], rect.height * start_offset[1]) 
+                end = grid_to_px(f_pos + end_offset)
+                color = WIRE_COLOR_ON if e.port_states[index] else WIRE_COLOR_OFF
+                pg.draw.line(self.screen, color, tuple(start), tuple(end), wire_width)
 
     def draw_wiring_indicator(self):
         if self.wiring_widget is None: return

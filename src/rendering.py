@@ -134,14 +134,15 @@ def render_board(
     if wiring_visible:
         wire_width = cam.get_wire_width()
         for pos, e in board.get_all(filter_type=Wirable):
-            for i, (_, d, _) in enumerate(e.wirings):
-                if d is None: continue
-                d_pos = board.find(d)
-                if d_pos is None:
+            for index, (is_input, f, f_index) in enumerate(e.wirings):
+                if f is None: continue
+                f_pos = board.find(f)
+                if f_pos is None:
                     continue
-                    # raise ValueError("unable to find desired entity while drawing wiring")
-                start, end = grid_to_px(pos + V2(0.5, 0.5)), grid_to_px(d_pos + V2(0.5, 0.5))
-                color = WIRE_COLOR_ON if e.port_states[i] else WIRE_COLOR_OFF
+                    # raise RuntimeError("unable to find desired entity while drawing wiring")
+                start = grid_to_px(pos + e.get_port_offset(is_input, index)) 
+                end = grid_to_px(f_pos + f.get_port_offset(not is_input, f_index))
+                color = WIRE_COLOR_ON if e.port_states[index] else WIRE_COLOR_OFF
                 pg.draw.line(surf, color, tuple(start), tuple(end), wire_width)
 
 

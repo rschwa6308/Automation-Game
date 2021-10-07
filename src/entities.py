@@ -414,6 +414,9 @@ class Wirable(Entity):
         """called immediately after all ports have been resolved; used for updating internal state"""
         pass
 
+    def get_port_offset(self, is_input, index):
+        return V2(0.5, 0.5)
+
 
 class Piston(Block, Wirable):
     name = "Piston"
@@ -514,7 +517,6 @@ class Sensor(Block, Wirable):
         if self.activated is None:
             raise RuntimeError("cannot read output value on a sensor that has not yet obtained a reading (check engine execution order)")
         return self.activated
-
     
     def draw_onto_base(self, surf: pg.Surface, rect: pg.Rect, edit_mode: bool, step_progress: float = 0.0, neighborhood = (([],) * 5,) * 5):
         eye_box_width = rect.width * 0.75
@@ -579,7 +581,10 @@ class Gate(Wirable):
     orients = False
 
     min_num_inputs = 2
-    max_num_inputs = 5    
+    max_num_inputs = 5
+
+    left_right_padding = 0.15
+    top_bottom_padding = 0.20
     
     def resolve_output_port(self, i) -> bool:
         super().resolve_output_port(i)
@@ -597,12 +602,58 @@ class Gate(Wirable):
         text = self.name.split()[0]     # gate type
         render_text_centered_xy(text, (0, 0, 0), surf, rect.center, font_size, bold=True)
 
+    def get_port_offset(self, is_input, index):
+        if is_input:
+            gate_h = 1.0 - 2*self.top_bottom_padding
+            return V2(
+                self.left_right_padding,
+                self.top_bottom_padding + gate_h * (index + 1) / (self.num_inputs + 1)
+            )
+        else:
+            return V2(
+                1.0 - self.left_right_padding,
+                0.5
+            )
+
 
 class AndGate(Gate):
     name = "AND Gate"
 
     def eval(self, *inputs) -> bool:
         return all(inputs)
+    
+    def draw_onto_base(self, surf: pg.Surface, rect: pg.Rect, edit_mode: bool, step_progress: float=0.0, neighborhood=(([],) * 5,) * 5):
+        super().draw_onto_base(surf, rect, edit_mode, step_progress=step_progress, neighborhood=neighborhood)
+
+        lr_pad = rect.width * self.left_right_padding
+        tb_pad = rect.height * self.top_bottom_padding
+        r = rect.height/2 - tb_pad
+        pg.draw.circle(surf, (0, 0, 0), 
+            (rect.right - lr_pad - r, rect.centery),
+            r
+        )
+        # draw_aacircle(surf, 
+        #     round(rect.right - side_pad - r), round(rect.centery),
+        #     round(r*0.95), (0, 0, 0)
+        # )
+        pg.draw.rect(surf, (0, 0, 0), pg.Rect(
+            rect.left + lr_pad, rect.top + rect.height/2 - r,
+            rect.width - 2*lr_pad - r, 2*r, 
+        ))
+
+        # m = 5
+        # pg.draw.circle(surf, (255, 255, 255), 
+        #     (rect.right - side_pad - r, rect.centery),
+        #     r - m
+        # )
+        # pg.draw.rect(surf, (255, 255, 255), pg.Rect(
+        #     rect.left + side_pad + m, rect.top + rect.height/2 - r + m,
+        #     rect.width - 2*side_pad - r - 2*m, 2*r - 2*m, 
+        # ))
+
+
+        font_size = rect.width * 0.3
+        render_text_centered_xy("AND", (255, 255, 255), surf, rect.center, font_size, bold=True)
 
 
 class OrGate(Gate):
@@ -630,9 +681,10 @@ class NotGate(Gate):
 
 
 
-ENTITY_TYPES = [Barrel, Barrier, Boostpad, ResourceExtractor, ResourceTile, Target, Piston, Sensor, PressurePlate, AndGate, OrGate, NotGate]
-# ENTITY_TYPES = all_subclasses(Entity)
-# print(ENTITY_TYPES)
+# ENTITY_TYPES = [Barrel, Barrier, Boostpad, ResourceExtractor, ResourceTile, Target, Piston, Sensor, PressurePlate, AndGate, OrGate, NotGate]
+# get all leaf nodes
+ENTITY_TYPES = [c for c in all_subclasses(Entity) if not all_subclasses(c)]
+print(ENTITY_TYPES)
 
 
 
