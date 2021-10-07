@@ -130,6 +130,7 @@ def render_board(
         )
     
     # draw wires
+    # TODO: make lines correct thickness when slanted
     # TODO: antialias lines
     if wiring_visible:
         wire_width = cam.get_wire_width()

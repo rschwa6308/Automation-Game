@@ -233,12 +233,12 @@ class ResourceExtractor(Block):
         # TEMPORARY
         s = rect.width
         w = round(s * 0.1)
-        draw_aacircle(surf, *rect.center, round(s * 0.35), (220, 220, 220))
+        draw_aacircle(surf, *rect.center, round(s * 0.35), (210, 210, 210))
         draw_chevron(
             surf,
             V2(*rect.center) + self.orientation * (s * 0.432),
             self.orientation,
-            (220, 220, 220),
+            (210, 210, 210),
             round(s * 0.28),
             w,
             angle=108
@@ -583,8 +583,8 @@ class Gate(Wirable):
     min_num_inputs = 2
     max_num_inputs = 5
 
-    left_right_padding = 0.15
-    top_bottom_padding = 0.20
+    left_right_padding = 0.08
+    top_bottom_padding = 0.18
     
     def resolve_output_port(self, i) -> bool:
         super().resolve_output_port(i)
@@ -600,7 +600,7 @@ class Gate(Wirable):
         super().draw_onto_base(surf, rect, edit_mode, step_progress=step_progress, neighborhood=neighborhood)
         font_size = rect.width * 0.3
         text = self.name.split()[0]     # gate type
-        render_text_centered_xy(text, (0, 0, 0), surf, rect.center, font_size, bold=True)
+        render_text_centered_xy(text, GATE_PRIMARY_COLOR, surf, rect.center, font_size, bold=True)
 
     def get_port_offset(self, is_input, index):
         if is_input:
@@ -625,35 +625,59 @@ class AndGate(Gate):
     def draw_onto_base(self, surf: pg.Surface, rect: pg.Rect, edit_mode: bool, step_progress: float=0.0, neighborhood=(([],) * 5,) * 5):
         super().draw_onto_base(surf, rect, edit_mode, step_progress=step_progress, neighborhood=neighborhood)
 
-        lr_pad = rect.width * self.left_right_padding
+        m = max(round(rect.width*0.04), 2)
+        port_width = m * 2
+        port_height = m
+        lr_pad = rect.width * self.left_right_padding + port_width
         tb_pad = rect.height * self.top_bottom_padding
         r = rect.height/2 - tb_pad
-        pg.draw.circle(surf, (0, 0, 0), 
+
+        # outer
+        outer = pg.Rect(
+            rect.left + lr_pad , rect.top + tb_pad,
+            rect.width - 2*lr_pad - r, rect.height - 2*tb_pad, 
+        )
+        pg.draw.circle(surf, GATE_PRIMARY_COLOR, 
             (rect.right - lr_pad - r, rect.centery),
             r
         )
-        # draw_aacircle(surf, 
-        #     round(rect.right - side_pad - r), round(rect.centery),
-        #     round(r*0.95), (0, 0, 0)
-        # )
-        pg.draw.rect(surf, (0, 0, 0), pg.Rect(
-            rect.left + lr_pad, rect.top + rect.height/2 - r,
-            rect.width - 2*lr_pad - r, 2*r, 
-        ))
+        pg.draw.rect(surf, GATE_PRIMARY_COLOR, outer)
 
-        # m = 5
-        # pg.draw.circle(surf, (255, 255, 255), 
-        #     (rect.right - side_pad - r, rect.centery),
-        #     r - m
+        # inner
+        
+        inner = outer.inflate(-2*m, -2*m)
+        inner.width += m
+        pg.draw.circle(surf, GATE_BG_COLOR, 
+            (rect.right - lr_pad - r, rect.centery),
+            r - m
+        )
+        # draw_aacircle(
+        #     surf,
+        #     int(rect.right - lr_pad - r), int(rect.centery),
+        #     int(r - m),
+        #     (255, 255, 255)
         # )
-        # pg.draw.rect(surf, (255, 255, 255), pg.Rect(
-        #     rect.left + side_pad + m, rect.top + rect.height/2 - r + m,
-        #     rect.width - 2*side_pad - r - 2*m, 2*r - 2*m, 
-        # ))
+        pg.draw.rect(surf, GATE_BG_COLOR, inner)
 
+        for index in range(self.num_inputs):
+            offset = self.get_port_offset(True, index)
+            pg.draw.rect(surf, GATE_PRIMARY_COLOR, pg.Rect(
+                rect.left + rect.width * offset[0],
+                rect.top + rect.height * offset[1] - port_height/2,
+                port_width, port_height
+            ))
+        
+        for index in range(self.num_outputs):
+            offset = self.get_port_offset(False, index)
+            pg.draw.rect(surf, GATE_PRIMARY_COLOR, pg.Rect(
+                rect.left + rect.width * offset[0] - (port_width+1),
+                rect.top + rect.height * offset[1] - port_height/2,
+                port_width+1, port_height
+            ))
+        
 
         font_size = rect.width * 0.3
-        render_text_centered_xy("AND", (255, 255, 255), surf, rect.center, font_size, bold=True)
+        render_text_centered_xy("AND", GATE_PRIMARY_COLOR, surf, rect.center, font_size, bold=True)
 
 
 class OrGate(Gate):

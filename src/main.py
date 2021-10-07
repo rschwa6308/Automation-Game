@@ -531,7 +531,7 @@ class LevelRunner:
         """draw the level onto `viewport_surf` using `self.step_progress` for animation state"""
         render_board(self.level.board, self.viewport_surf, self.camera, self.edit_mode, self.selected_entity, self.substep_progress)
 
-    def draw_shelf(self):        
+    def draw_shelf(self):
         self.shelf_surf.fill(SHELF_BG_COLOR)
 
         # draw palette
@@ -541,13 +541,13 @@ class LevelRunner:
             rect = pg.Rect(
                 margin + (PALETTE_ITEM_SIZE + margin + PALETTE_ITEM_SPACING) * i,
                 margin,
-                PALETTE_ITEM_SIZE,
-                PALETTE_ITEM_SIZE
+                PALETTE_ITEM_SIZE + 1,
+                PALETTE_ITEM_SIZE + 1
             )
             self.palette_rects.append((rect, e_prototype))
             if count > 0:   # only draw item if there are any left (maintains spacing)
                 temp_entity = e_prototype.get_instance()
-                temp_entity.draw_onto_base(self.shelf_surf, rect, edit_mode=True)
+                temp_entity.draw_onto(self.shelf_surf, rect, edit_mode=True)
                 # pg.draw.rect(self.shelf_surf, (0, 255, 0), rect)
                 pg.draw.circle(self.shelf_surf, (255, 0, 0), rect.topright, 14)
                 render_text_centered_xy(str(count), (255, 255, 255), self.shelf_surf, rect.topright, 20, bold=True)
@@ -642,7 +642,8 @@ class LevelRunner:
         def grid_to_px(pos: V2) -> V2:
             return (V2(*self.viewport_surf.get_rect().center) + (pos - self.camera.center) * s).floor()
 
-        start = grid_to_px(self.level.board.find(self.editing_entity) + V2(0.5, 0.5))
+        start_offset = self.editing_entity.get_port_offset(self.wiring_widget.is_input, self.wiring_widget.wire_index)
+        start = grid_to_px(self.level.board.find(self.editing_entity) + start_offset)
         wire_width = self.camera.get_wire_width()
         pg.draw.line(self.screen, WIRE_COLOR_OFF, tuple(start), tuple(self.mouse_pos), wire_width)
 

@@ -44,6 +44,8 @@ VIEWPORT_BG_COLOR       = (255, 255, 255)
 GRID_LINE_COLOR         = (0, 0, 0)
 WIRE_COLOR_OFF          = (127, 0, 0)
 WIRE_COLOR_ON           = (255, 0, 0)
+GATE_PRIMARY_COLOR      = (0, 0, 0)
+GATE_BG_COLOR           = (210, 210, 210)
 
 DEFAULT_CELL_SIZE           = 64
 DEFAULT_GRID_LINE_WIDTH     = 2
