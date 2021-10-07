@@ -766,6 +766,17 @@ class LevelRunner:
 
 if __name__ == "__main__":
     # LevelRunner(new_test_level).run()
-    LevelRunner([level_1, level_2, level_3, level_4, level_5, level_6, level_7]).run()
+    LevelRunner([
+        # level_1,
+        # level_2,
+        # level_3,
+        # level_4,
+        # level_5,
+        # level_6,
+        # level_7,
+        # level_8,
+        # level_9,
+        level_10
+    ]).run()
     # LevelRunner(test_level2, [BarrelDistortion]).run()
     # LevelRunner(minimal_level).run()

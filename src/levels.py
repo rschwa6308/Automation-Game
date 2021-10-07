@@ -87,6 +87,7 @@ level_6 = Level(
     name="Level 6"
 )
 
+
 level_7 = Level(
     Board({
         **random_flood((0, 0), 10, ResourceTile(Color.BLUE_GREEN)),
@@ -98,6 +99,57 @@ level_7 = Level(
         (EntityPrototype(Piston), 1),
     ]),
     name="Level 7"
+)
+
+
+level_8 = Level(
+    Board({
+        **random_flood((0, 0), 10, ResourceTile(Color.RED_ORANGE)),
+        (8, -8): [Target(Color.RED_ORANGE, count=10)],
+        (0, -13): [Target(Color.RED_ORANGE, count=10)],
+    }),
+    Palette([
+        (EntityPrototype(ResourceExtractor), 1),
+        (EntityPrototype(Sensor), 1),
+        (EntityPrototype(Piston), 1),
+    ]),
+    name="Level 8"
+)
+
+
+level_9 = Level(
+    Board({
+        **disk((0, 0), 2, ResourceTile(Color.BLUE)),
+        **disk((0, 14), 2, ResourceTile(Color.RED)),
+        (12, 7): [Target(Color.VIOLET, count=10)],
+        (12, 4): [Target(Color.BLUE, count=10)],
+        (12, 10): [Target(Color.RED, count=10)],
+    }),
+    Palette([
+        (EntityPrototype(ResourceExtractor), 2),
+        (EntityPrototype(Boostpad), 1),
+        (EntityPrototype(Sensor), 1),
+        (EntityPrototype(Piston), 2)
+    ]),
+    name="Level 9"
+)
+
+
+level_10 = Level(
+    Board({
+        **disk((0, 3), 2, ResourceTile(Color.GREEN)),
+        (5, 0): [Target(Color.GREEN, count=1)],
+        (8, 3): [Target(Color.GREEN, count=14)],
+        **disk((-3, 12), 2, ResourceTile(Color.BROWN)),
+        **disk((3, 12), 2, ResourceTile(Color.BROWN)),
+    }),
+    Palette([
+        (EntityPrototype(ResourceExtractor), 3),
+        (EntityPrototype(Sensor), 2),
+        (EntityPrototype(Piston), 2),
+        (EntityPrototype(AndGate), 1)
+    ]),
+    name="Level 10"
 )
 
 
