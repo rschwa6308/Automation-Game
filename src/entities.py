@@ -9,9 +9,9 @@ import pygame.freetype
 import pygame.gfxdraw
 from pygame.transform import threshold
 
-from helpers import V2, Direction, all_subclasses, draw_aacircle, draw_chevron, draw_rectangle, render_text_centered, interpolate_colors, sgn
+from helpers import V2, Direction, all_subclasses, draw_aacircle, draw_chevron, draw_rectangle, render_text_centered_xy, interpolate_colors, sgn
 from colors import Color
-from widgets import DirectionEditor, MinusPlusButton, SmallIntEditor, Spacing, Widget, WireEditor
+from widgets import DirectionEditor, MinusPlusButton, SmallIntEditor, Spacing, Widget, WireEditor, WiringContainer
 from constants import *
 
 
@@ -225,7 +225,7 @@ class ResourceExtractor(Block):
         self.widgets = [
             DirectionEditor(self, "localvar:orientation", "orientation"),
             # Spacing(20.0),
-            SmallIntEditor(self, "localvar:period", (1, 5), "period"),
+            SmallIntEditor(self, "localvar:period", (2, 5), "period"),      # TODO: decide on the bounds
             SmallIntEditor(self, "localvar:phase", (1, "localvar:period"), "phase"),
         ]
     
@@ -233,12 +233,12 @@ class ResourceExtractor(Block):
         # TEMPORARY
         s = rect.width
         w = round(s * 0.1)
-        draw_aacircle(surf, *rect.center, round(s * 0.35), (220, 220, 220))
+        draw_aacircle(surf, *rect.center, round(s * 0.35), (210, 210, 210))
         draw_chevron(
             surf,
             V2(*rect.center) + self.orientation * (s * 0.432),
             self.orientation,
-            (220, 220, 220),
+            (210, 210, 210),
             round(s * 0.28),
             w,
             angle=108
@@ -291,7 +291,7 @@ class Target(Carpet):
         padding = s * 0.35
         radius = round(s * 0.2)
         pg.draw.rect(surf, (255, 255, 255), rect.inflate(-padding, -padding), border_radius=radius)
-        render_text_centered(
+        render_text_centered_xy(
             str(self.count),
             (0, 0, 0),
             surf,
@@ -300,14 +300,42 @@ class Target(Carpet):
         )
 
 
+# TODO: maybe store input wirings and output wirings in separate lists
 class Wirable(Entity):
     has_ports = True
     editable = True
+    
+    # defaults, which can be overridden in child classes
+    min_num_inputs = 1
+    max_num_inputs = 1
+
+    min_num_outputs = 1
+    max_num_outputs = 30    # TESTING
 
     def __init__(self, locked: bool, **kwargs):
         super().__init__(locked, **kwargs)
-        self.wirings = []
-        self.port_states = []
+        # self.activated = None
+        
+        # min is default value
+        self.num_inputs = self.min_num_inputs
+        self.num_outputs = self.min_num_outputs
+
+        # format is [(is_input, other_entity, other_entity's wire_index)]
+        self.wirings: Sequence[Sequence[bool, Entity, int]] = [
+            [True, None, None] for _ in range(self.num_inputs)
+        ] + [
+            [False, None, None] for _ in range(self.num_outputs)
+        ]
+        self.port_states = [None for _ in self.wirings]
+        self.ports_visited = [False for _ in self.port_states]
+
+        self.widgets = [
+            WiringContainer(
+                self,
+                self.min_num_inputs, self.max_num_inputs,
+                self.min_num_outputs, self.max_num_outputs,
+            )
+        ]
 
     def available_inputs(self) -> Collection[int]:
         res = []
@@ -341,21 +369,27 @@ class Wirable(Entity):
         self.wirings[i][1] = None
         self.wirings[i][2] = None
     
-    def clear_ports(self) -> None:
+    def break_all_connections(self):
+        for i in range(len(self.wirings)):
+            self.break_connection(i)
+    
+    def clear_ports_visited(self) -> None:
+        self.ports_visited =  [False for _ in self.port_states]
+
+    def clear_ports_states(self) -> None:
         self.port_states =  [None for _ in self.port_states]
     
     def resolve_port(self, i) -> bool:
-        """resolves the given port by recursing backwards on inputs, and by calling `self.resolve_output_port` on outputs"""
+        """Resolve the given port by recursing backwards on inputs, and by calling `self.resolve_output_port` on outputs"""
         # use cached value (requires clearing before every round)
-        if self.port_states[i] not in (None, "visited"):
+        # if self.port_states[i] not in (None, "visited"):
+        # if self.port_states[i] not in ("visited", ):        # TESTING
+        #     return self.port_states[i]
+        if self.ports_visited[i]:
+            # print("CYCLE DETECTED IN WIRING GRAPH")
             return self.port_states[i]
-        
-        # check to see if node already visited - indicates a cycle in the wiring graph
-        if self.port_states[i] == "visited":
-            print("CYCLE DETECTED IN WIRING GRAPH")
-            res = False                         # for now, just set port to False
         else:
-            self.port_states[i] = "visited"
+            self.ports_visited[i] = True
             
             inp, other, j = self.wirings[i]
             if other is None:
@@ -380,6 +414,9 @@ class Wirable(Entity):
         """called immediately after all ports have been resolved; used for updating internal state"""
         pass
 
+    def get_port_offset(self, is_input, index):
+        return V2(0.5, 0.5)
+
 
 class Piston(Block, Wirable):
     name = "Piston"
@@ -388,6 +425,9 @@ class Piston(Block, Wirable):
     
     max_amt = 0.75
 
+    min_num_outputs = 0
+    max_num_outputs = 0
+
     # boostpads are unlocked by default
     def __init__(self, orientation: Direction = Direction.NORTH, locked: bool = False, **kwargs):
         super().__init__(locked, **kwargs)
@@ -395,19 +435,8 @@ class Piston(Block, Wirable):
             raise ValueError("Piston orientation cannot be `Direction.NONE`")
         self.orientation = orientation
         self.activated = None
-        
-        # format is [(is_input, other_entity, other_entity's wire_index)]
-        self.wirings: Sequence[Sequence[bool, Entity, int]] = [
-            [True, None, None],
-            [False, None, None]
-        ]
-        self.port_states = [None for _ in self.wirings]
 
-        self.widgets = [
-            DirectionEditor(self, "localvar:orientation", "orientation"),
-            WireEditor(self, 0, "input"),
-            WireEditor(self, 1, "output"),
-        ]
+        self.widgets.insert(0, DirectionEditor(self, "localvar:orientation", "orientation"))
     
     def resolve_output_port(self, i) -> bool:
         super().resolve_output_port(i)
@@ -469,6 +498,9 @@ class Sensor(Block, Wirable):
     ascii_str = "S"
     orients = True
 
+    min_num_inputs = 0
+    max_num_inputs = 0
+
     target_entity_type = Barrel
 
     def __init__(self, orientation: Direction = Direction.NORTH, locked: bool = False, **kwargs):
@@ -477,24 +509,14 @@ class Sensor(Block, Wirable):
             raise ValueError("Sensor orientation cannot be `Direction.NONE`")
         self.orientation = orientation
         self.activated = None
-        
-        # format is [(is_input, other_entity, other_entity's wire_index)]
-        self.wirings: Sequence[Sequence[bool, Entity, int]] = [
-            [False, None, None]
-        ]
-        self.port_states = [None for _ in self.wirings]
 
-        self.widgets = [
-            DirectionEditor(self, "localvar:orientation", "orientation"),
-            WireEditor(self, 0, "output"),
-        ]
+        self.widgets.insert(0, DirectionEditor(self, "localvar:orientation", "orientation"))
     
     def resolve_output_port(self, i) -> bool:
         super().resolve_output_port(i)
         if self.activated is None:
             raise RuntimeError("cannot read output value on a sensor that has not yet obtained a reading (check engine execution order)")
         return self.activated
-
     
     def draw_onto_base(self, surf: pg.Surface, rect: pg.Rect, edit_mode: bool, step_progress: float = 0.0, neighborhood = (([],) * 5,) * 5):
         eye_box_width = rect.width * 0.75
@@ -526,6 +548,34 @@ class Sensor(Block, Wirable):
             pg.draw.line(surf, (0, 0, 0), tuple(start), tuple(end), width=round(draw_width/2))
 
 
+class PressurePlate(Wirable):
+    name = "Pressure Plate"
+    ascii_str = "PP"
+    orients = False
+
+    min_num_inputs = 0
+    max_num_inputs = 0
+
+    target_entity_type = Barrel
+
+    def __init__(self, locked: bool = False, **kwargs):
+        super().__init__(locked, **kwargs)
+        self.activated = None
+    
+    def resolve_output_port(self, i) -> bool:
+        super().resolve_output_port(i)
+        if self.activated is None:
+            raise RuntimeError("cannot read output value on a sensor that has not yet obtained a reading (check engine execution order)")
+        return self.activated
+
+    def draw_onto_base(self, surf: pg.Surface, rect: pg.Rect, edit_mode: bool, step_progress: float = 0.0, neighborhood = (([],) * 5,) * 5):
+        s = rect.width
+        padding = s * 0.2
+        br = padding / 2
+        pg.draw.rect(surf, (50, 50, 50), rect.inflate(-padding, -padding), border_radius=int(br))
+
+
+
 class Gate(Wirable):
     """abstract class defining the common behavior of all (single-output) logic gates"""
     orients = False
@@ -533,52 +583,8 @@ class Gate(Wirable):
     min_num_inputs = 2
     max_num_inputs = 5
 
-    def __init__(self, locked: bool = False, **kwargs):
-        super().__init__(locked, **kwargs)
-        self.activated = None
-        
-        self.num_inputs = self.min_num_inputs
-
-        # format is [(is_input, other_entity, other_entity's wire_index)]
-        self.wirings: Sequence[Sequence[bool, Entity, int]] = [
-            [True, None, None] for _ in range(self.num_inputs)
-        ] + [[False, None, None]]
-        self.port_states = [None for _ in self.wirings]
-
-        self.update_widgets()
-    
-    def update_widgets(self):
-        num_inputs_changable = self.max_num_inputs > self.min_num_inputs
-
-        self.widgets = [
-            WireEditor(self, i, f"input {i + 1 if num_inputs_changable else ''}") for i in range(self.num_inputs)
-        ] + [WireEditor(self, self.num_inputs, f"output")]
-
-        # if interval for num_inputs contains more than 1 possible value, add a MinusPlusButton
-        if num_inputs_changable:
-            mp_button = MinusPlusButton(
-                self, self.remove_input, self.add_input,
-                limits=[self.min_num_inputs, self.max_num_inputs],
-                attr="localvar:num_inputs"
-            )
-            self.widgets.insert(self.num_inputs, mp_button)
-            self.widgets.insert(self.num_inputs + 1, Spacing(20.0))
-
-    def remove_input(self):
-        if self.num_inputs <= self.min_num_inputs: return
-        # break the connection
-        self.break_connection(self.num_inputs - 1)
-        self.num_inputs -= 1
-        self.wirings.pop(-2)        # last input
-        self.port_states.pop(-2)
-        self.update_widgets()
-
-    def add_input(self):
-        if self.num_inputs >= self.max_num_inputs: return
-        self.num_inputs += 1
-        self.wirings.insert(-1, [True, None, None])
-        self.port_states.insert(-1, None)
-        self.update_widgets()
+    left_right_padding = 0.08
+    top_bottom_padding = 0.18
     
     def resolve_output_port(self, i) -> bool:
         super().resolve_output_port(i)
@@ -594,7 +600,20 @@ class Gate(Wirable):
         super().draw_onto_base(surf, rect, edit_mode, step_progress=step_progress, neighborhood=neighborhood)
         font_size = rect.width * 0.3
         text = self.name.split()[0]     # gate type
-        render_text_centered(text, (0, 0, 0), surf, rect.center, font_size, bold=True)
+        render_text_centered_xy(text, GATE_PRIMARY_COLOR, surf, rect.center, font_size, bold=True)
+
+    def get_port_offset(self, is_input, index):
+        if is_input:
+            gate_h = 1.0 - 2*self.top_bottom_padding
+            return V2(
+                self.left_right_padding,
+                self.top_bottom_padding + gate_h * (index + 1) / (self.num_inputs + 1)
+            )
+        else:
+            return V2(
+                1.0 - self.left_right_padding,
+                0.5
+            )
 
 
 class AndGate(Gate):
@@ -602,6 +621,63 @@ class AndGate(Gate):
 
     def eval(self, *inputs) -> bool:
         return all(inputs)
+    
+    def draw_onto_base(self, surf: pg.Surface, rect: pg.Rect, edit_mode: bool, step_progress: float=0.0, neighborhood=(([],) * 5,) * 5):
+        super().draw_onto_base(surf, rect, edit_mode, step_progress=step_progress, neighborhood=neighborhood)
+
+        m = max(round(rect.width*0.04), 2)
+        port_width = m * 2
+        port_height = m
+        lr_pad = rect.width * self.left_right_padding + port_width
+        tb_pad = rect.height * self.top_bottom_padding
+        r = rect.height/2 - tb_pad
+
+        # outer
+        outer = pg.Rect(
+            rect.left + lr_pad , rect.top + tb_pad,
+            rect.width - 2*lr_pad - r, rect.height - 2*tb_pad, 
+        )
+        pg.draw.circle(surf, GATE_PRIMARY_COLOR, 
+            (rect.right - lr_pad - r, rect.centery),
+            r
+        )
+        pg.draw.rect(surf, GATE_PRIMARY_COLOR, outer)
+
+        # inner
+        
+        inner = outer.inflate(-2*m, -2*m)
+        inner.width += m
+        pg.draw.circle(surf, GATE_BG_COLOR, 
+            (rect.right - lr_pad - r, rect.centery),
+            r - m
+        )
+        # draw_aacircle(
+        #     surf,
+        #     int(rect.right - lr_pad - r), int(rect.centery),
+        #     int(r - m),
+        #     (255, 255, 255)
+        # )
+        pg.draw.rect(surf, GATE_BG_COLOR, inner)
+
+        for index in range(self.num_inputs):
+            offset = self.get_port_offset(True, index)
+            pg.draw.rect(surf, GATE_PRIMARY_COLOR, pg.Rect(
+                rect.left + rect.width * offset[0],
+                rect.top + rect.height * offset[1] - port_height/2,
+                port_width, port_height
+            ))
+        
+        for index in range(self.num_outputs):
+            offset = self.get_port_offset(False, index)
+            pg.draw.rect(surf, GATE_PRIMARY_COLOR, pg.Rect(
+                rect.left + rect.width * offset[0] - (port_width+1),
+                rect.top + rect.height * offset[1] - port_height/2,
+                port_width+1, port_height
+            ))
+        
+
+        font_size = rect.width * 0.3
+        render_text_centered_xy("AND", GATE_PRIMARY_COLOR, surf, rect.center, font_size, bold=True)
 
 
 class OrGate(Gate):
@@ -629,9 +705,10 @@ class NotGate(Gate):
 
 
 
-ENTITY_TYPES = [Barrel, Barrier, Boostpad, ResourceExtractor, ResourceTile, Target, Piston, Sensor, AndGate, OrGate, NotGate]
-# ENTITY_TYPES = all_subclasses(Entity)
-# print(ENTITY_TYPES)
+# ENTITY_TYPES = [Barrel, Barrier, Boostpad, ResourceExtractor, ResourceTile, Target, Piston, Sensor, PressurePlate, AndGate, OrGate, NotGate]
+# get all leaf nodes
+ENTITY_TYPES = [c for c in all_subclasses(Entity) if not all_subclasses(c)]
+print(ENTITY_TYPES)
 
 
 
@@ -639,6 +716,7 @@ class EntityPrototype:
     """a class for storing entity prototypes (e.g. in the palette)"""
     def __init__(self, entity_type, **kwargs):
         self.entity_type = entity_type
+        kwargs["locked"] = False
         self.kwargs = kwargs
 
     def get_instance(self):

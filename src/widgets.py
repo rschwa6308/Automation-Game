@@ -1,9 +1,10 @@
 # --- UI-Widgets for the Editor Panel --- #
-from typing import Callable, Tuple, Union
+from typing import Callable, List, Optional, Tuple, Union
 import pygame as pg
 
-from helpers import V2, Direction, clamp, draw_aacircle, draw_chevron, draw_rectangle, rect_union, render_text_centered, render_text_left_justified
-from constants import EDITOR_WIDTH, HIGHLIGHT_COLOR
+
+from helpers import V2, Direction, clamp, draw_aacircle, draw_chevron, draw_rectangle, rect_union, render_text_centered_xy, render_text_left_justified
+from constants import EDITOR_WIDGET_SPACING, EDITOR_WIDTH, HIGHLIGHT_COLOR
 
 FONT_SIZE = EDITOR_WIDTH / 11
 
@@ -16,13 +17,13 @@ class Widget:
         # draw bounding box
         # pg.draw.rect(surf, (0, 0, 0), rect, width=1)
     
-    def handle_click(self, pos: V2) -> bool:
+    def handle_click(self, pos: V2) -> Optional["WireEditor"]:
         """
         handle a left-click event;
         `pos` is given in coordinates wrt to the editor surf;
-        return True iff we wish to indicate to the level runner that this wiring widget is in use
+        return a wiring widget to indicate to the level runner that said wiring widget is in use
         """
-        return False
+        return None
     
     def get_attr(self, attr_str):
         return self.entity.__getattribute__(self.parse_attr_string(attr_str))
@@ -82,7 +83,7 @@ class DirectionEditor(AttrEditor):
             for d in Direction
             if d is not Direction.NONE
         ]
-        render_text_centered(self.label, (0, 0, 0), surf, V2(rect.centerx, rect.bottom - s * 0.16), FONT_SIZE)
+        render_text_centered_xy(self.label, (0, 0, 0), surf, V2(rect.centerx, rect.bottom - s * 0.16), FONT_SIZE)
     
     def handle_click(self, pos: V2):
         for d, hitbox in self.hitboxes:
@@ -90,7 +91,7 @@ class DirectionEditor(AttrEditor):
                 self.set_value(d)
                 break
         
-        return False
+        return None
 
 
 class SmallIntEditor(AttrEditor):
@@ -116,6 +117,9 @@ class SmallIntEditor(AttrEditor):
 
     def draw_onto(self, surf: pg.Surface, rect: pg.Rect, **kwargs):
         super().draw_onto(surf, rect)
+        
+        self.set_value(clamp(self.get_value(), *self.get_limits()))
+
         render_text_left_justified(self.label, (0, 0, 0), surf, V2(rect.left + rect.width * 0.03, rect.centery), FONT_SIZE)
         # TODO: draw number selector boxes
         box_width = int(rect.height * 0.75)
@@ -132,16 +136,16 @@ class SmallIntEditor(AttrEditor):
             )
             color = (255, 255, 255) if n == self.get_value() else (0, 0, 0)
             draw_rectangle(surf, box, (0, 0, 0), thickness=box_thickness)
-            render_text_centered(str(n), color, surf, box.center, FONT_SIZE)
+            render_text_centered_xy(str(n), color, surf, box.center, FONT_SIZE)
             self.hitboxes.append((n, box))
     
-    def handle_click(self, pos: V2) -> None:
+    def handle_click(self, pos: V2):
         for n, hitbox in self.hitboxes:
             if hitbox.collidepoint(*pos):
                 self.set_value(n)
                 break
         
-        return False
+        return None
 
 
 class WireEditor(Widget):
@@ -183,11 +187,11 @@ class WireEditor(Widget):
 
         if self.get_value()[0] is None and not self.in_use:
             size = FONT_SIZE * 0.65
-            render_text_centered(
+            render_text_centered_xy(
                 "not", (63, 63, 63), surf,
                 (self.snapshot_rect.centerx, self.snapshot_rect.centery - size/2), size
             )
-            render_text_centered(
+            render_text_centered_xy(
                 "connected", (63, 63, 63), surf,
                 (self.snapshot_rect.centerx, self.snapshot_rect.centery + size/2), size
             )
@@ -202,12 +206,12 @@ class WireEditor(Widget):
         color = HIGHLIGHT_COLOR if self.in_use else (0, 0, 0)
         pg.draw.rect(surf, color, self.snapshot_rect, 2)
     
-    def handle_click(self, pos: V2) -> None:
+    def handle_click(self, pos: V2):
         if self.snapshot_rect.collidepoint(*pos):
             # break connection
             self.break_connection()
             self.in_use = True
-            return True
+            return self
 
 
 # class Button(Widget):
@@ -240,7 +244,7 @@ class MinusPlusButton(Widget):
         self.minus_hitbox: pg.Rect = None   # set in self.draw_onto
         self.plus_hitbox: pg.Rect = None    # set in self.draw_onto
     
-    def handle_click(self, pos: V2) -> bool:
+    def handle_click(self, pos: V2):
         if self.minus_hitbox is not None and self.minus_hitbox.collidepoint(*pos):
             self.on_press_minus()
         elif self.plus_hitbox is not None and self.plus_hitbox.collidepoint(*pos):
@@ -288,17 +292,18 @@ class MinusPlusButton(Widget):
         icon_font_size = FONT_SIZE * 1.0
 
         # draw background and border
+        # TODO: antialising!!!
         combined_rect = rect_union([self.minus_hitbox, self.plus_hitbox])
         pg.draw.rect(surf, background_color, combined_rect, border_radius=radius)
         pg.draw.rect(surf, border_color, combined_rect, width=border_width, border_radius=radius)
 
         # draw "-" button
         if minus_visible:
-            render_text_centered("-", icon_color, surf, self.minus_hitbox.center, icon_font_size)
+            render_text_centered_xy("-", icon_color, surf, self.minus_hitbox.center, icon_font_size)
 
         # draw "+" button
         if plus_visible:
-            render_text_centered("+", icon_color, surf, self.plus_hitbox.center, icon_font_size)
+            render_text_centered_xy("+", icon_color, surf, self.plus_hitbox.center, icon_font_size)
 
         # draw divider
         if minus_visible and plus_visible:
@@ -312,3 +317,123 @@ class MinusPlusButton(Widget):
         
 
 
+class WiringContainer(Widget):
+    aspect_ratio = 0.0
+
+    def __init__(
+        self, entity,
+        min_num_inputs, max_num_inputs,
+        min_num_outputs, max_num_outputs
+    ):
+        # HACK to avoid circular-import
+        from entities import Wirable
+
+        if not isinstance(entity, Wirable):
+            raise ValueError(f"WiringContainer cannot be bound to non-wirable entity: {self.entity}")
+
+        self.entity = entity
+
+        self.min_num_inputs = min_num_inputs
+        self.max_num_inputs = max_num_inputs
+        self.min_num_outputs = min_num_outputs
+        self.max_num_outputs = max_num_outputs
+
+        self.subwidgets: List[Widget] = []
+        self.subwidget_rects: List[pg.Rect] = []
+
+        self.update_subwidgets()
+
+    
+    def handle_click(self, pos: V2):
+        for hitbox, widget in self.subwidget_rects:
+            if hitbox.collidepoint(*pos):
+                return widget.handle_click(pos)
+    
+    def draw_onto(self, surf: pg.Surface, rect: pg.Rect, snapshot_provider=None, **kwargs):
+        # draw subwidgets
+        self.subwidget_rects.clear()
+        y_pos = rect.top
+        y_pos += EDITOR_WIDGET_SPACING
+        for w in self.subwidgets:
+            h = EDITOR_WIDTH // w.aspect_ratio
+            subrect = pg.Rect(0, y_pos, EDITOR_WIDTH, h)
+            w.draw_onto(surf, subrect, snapshot_provider=snapshot_provider)
+            self.subwidget_rects.append((subrect, w))
+            y_pos += h + EDITOR_WIDGET_SPACING
+        
+        return y_pos - rect.top     # return the height of the resulting rect
+    
+    def update_subwidgets(self):
+        num_inputs, num_outputs = self.entity.num_inputs, self.entity.num_outputs
+
+        num_inputs_changable = self.max_num_inputs > self.min_num_inputs
+        num_outputs_changable = self.max_num_outputs > self.min_num_outputs
+
+        self.subwidgets = [
+            WireEditor(self.entity, i, f"input {i + 1 if num_inputs_changable else ''}")
+            for i in range(num_inputs)
+        ] + [
+            WireEditor(self.entity, num_inputs + i, f"output {i + 1 if num_outputs_changable else ''}")
+            for i in range(num_outputs)
+        ]
+
+        # if interval for num_inputs contains more than 1 possible value, add a MinusPlusButton
+        if num_inputs_changable:
+            mp_button = MinusPlusButton(
+                self.entity, self.remove_input, self.add_input,
+                limits=[self.min_num_inputs, self.max_num_inputs],
+                attr="localvar:num_inputs"
+            )
+            i = num_inputs
+            self.subwidgets.insert(i, mp_button)
+            self.subwidgets.insert(i + 1, Spacing(20.0))
+        
+        # if interval for num_outputs contains more than 1 possible value, add a MinusPlusButton
+        if num_outputs_changable:
+            mp_button = MinusPlusButton(
+                self.entity, self.remove_output, self.add_output,
+                limits=[self.min_num_outputs, self.max_num_outputs],
+                attr="localvar:num_outputs"
+            )
+            i = -1
+            self.subwidgets.append(mp_button)
+            self.subwidgets.append(Spacing(20.0))
+    
+    def remove_input(self):
+        if self.entity.num_inputs <= self.min_num_inputs: return
+        i = self.entity.num_inputs - 1     # last input
+        # break the connection
+        self.entity.break_connection(i)
+        self.entity.wirings.pop(i)
+        self.entity.port_states.pop(i)
+        self.entity.num_inputs -= 1
+        self.update_subwidgets()
+
+    def add_input(self):
+        if self.entity.num_inputs >= self.max_num_inputs: return
+        i = self.entity.num_inputs
+        self.entity.wirings.insert(i, [True, None, None])
+        self.entity.port_states.insert(i, None)
+        self.entity.num_inputs += 1
+        self.update_subwidgets()
+    
+    def remove_output(self):
+        if self.entity.num_outputs <= self.min_num_outputs: return
+        i = -1                      # last output
+        # break the connection
+        self.entity.break_connection(i)
+        self.entity.wirings.pop(i)
+        self.entity.port_states.pop(i)
+        self.entity.num_outputs -= 1
+        self.update_subwidgets()
+
+    def add_output(self):
+        if self.entity.num_outputs >= self.max_num_outputs: return
+        self.entity.wirings.append([False, None, None])
+        self.entity.port_states.append(None)
+        self.entity.num_outputs += 1
+        self.update_subwidgets()
+
+
+# TODO
+# - a period+phase combo editor where we show a circle (or maybe an annulus) subdivided into `period` segments, one of which must be selected

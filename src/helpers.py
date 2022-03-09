@@ -85,8 +85,18 @@ class Direction(V2, Enum):
 pg.freetype.init()
 default_font = pg.freetype.SysFont("consolas", 16)      # should be monospaced (makes life easier)
 
-def render_text_centered(text, color, surf, dest, height, bold=False):
-    s = int(height)
+def render_text_centered_x(text, color, surf, dest, font_size, bold=False):
+    s = int(font_size)
+    # s = max([rec for rec in default_font.get_sizes() if rec[1] <= height], key=lambda rec: rec[1])[0]
+    style = pg.freetype.STYLE_STRONG if bold else pg.freetype.STYLE_DEFAULT
+    text_img, text_rect = default_font.render(text, fgcolor=color, size=s, style=style)
+    surf.blit(
+        text_img,
+        (dest[0] - text_rect.width / 2, dest[1])
+    )
+
+def render_text_centered_xy(text, color, surf, dest, font_size, bold=False):
+    s = int(font_size)
     # s = max([rec for rec in default_font.get_sizes() if rec[1] <= height], key=lambda rec: rec[1])[0]
     style = pg.freetype.STYLE_STRONG if bold else pg.freetype.STYLE_DEFAULT
     text_img, text_rect = default_font.render(text, fgcolor=color, size=s, style=style)
@@ -95,14 +105,72 @@ def render_text_centered(text, color, surf, dest, height, bold=False):
         (dest[0] - text_rect.width / 2, dest[1] - text_rect.height / 2)
     )
 
-def render_text_left_justified(text, color, surf, dest, height, bold=False):
-    s = int(height)
+def render_text_left_justified(text, color, surf, dest, font_size, bold=False):
+    s = int(font_size)
     # s = max([rec for rec in default_font.get_sizes() if rec[1] <= height], key=lambda rec: rec[1])[0]
     style = pg.freetype.STYLE_STRONG if bold else pg.freetype.STYLE_DEFAULT
     text_img, text_rect = default_font.render(text, fgcolor=color, size=s, style=style)
     surf.blit(
         text_img,
         (dest[0], dest[1] - text_rect.height / 2)
+    )
+
+def render_text_centered_x_wrapped(
+    text, color, font_size, surf,
+    midtop, line_width_px,
+    padding_top=0, padding_bottom=0, padding_sides=0, **kwargs
+):
+    line_width_chars = (line_width_px - padding_sides*2) // (font_size/2)
+    line_height_px = font_size  # round(font_size * 1.1)
+    lines = wrap_text(text, line_width_chars)
+
+    total_text_height = line_height_px * len(lines)
+    for i, line in enumerate(lines):
+        render_text_centered_x(
+            line, color, surf,
+            V2(*midtop) + V2(0, padding_top + line_height_px * i),
+            font_size,
+            **kwargs
+        )
+    
+    return pg.Rect(
+        midtop[0] - line_width_px/2, midtop[1],
+        line_width_px, total_text_height + padding_bottom
+    )
+
+def render_text_centered_xy_wrapped(
+    text, color, font_size,
+    surf, center, line_width_px,
+    padding_top=0, padding_bottom=0, padding_sides=0, **kwargs
+):
+    line_width_chars = (line_width_px - padding_sides*2) // (font_size/2)
+    line_height_px = font_size  # round(font_size * 1.1)
+    lines = wrap_text(text, line_width_chars)
+
+    total_text_height = line_height_px * len(lines)
+    midtop = V2(*center) - V2(0, total_text_height/2)
+    for i, line in enumerate(lines):
+        # print(line)
+        if len(lines) % 2:
+            # print("x and y")
+            render_text_centered_x(
+                line, color, surf,
+                midtop + V2(0, line_height_px * i),
+                font_size,
+                **kwargs
+            )
+        else:
+            # print("x only")
+            render_text_centered_xy(
+                line, color, surf,
+                midtop + V2(0, line_height_px * (i + 0.5)),
+                font_size,
+                **kwargs
+            )
+    
+    return pg.Rect(
+        midtop[0] - line_width_px/2, midtop[1],
+        line_width_px, total_text_height + padding_top + padding_bottom
     )
 # ------------------ #
 

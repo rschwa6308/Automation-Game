@@ -182,7 +182,8 @@ class Level:
     def __init__(
         self,
         board: Board = None,
-        palette: Palette = None
+        palette: Palette = None,
+        name=None
     ):
         if board is None:
             board = Board()
@@ -190,8 +191,11 @@ class Level:
         if palette is None:
             palette = Palette()
 
+
         self.board = board
         self.palette = palette
+
+        self.name = name or "<unknown>"
 
         self.starting_state: Tuple[Board, Palette] = (deepcopy(board), deepcopy(palette))
 
@@ -201,9 +205,13 @@ class Level:
         # NOTE: moving `self.reset_wiring_network` to be immediately before `self.resolve_wiring_network` leaves the wires on for longer
         # not sure if it looks better or worse
         self.substeps = [
-            [self.apply_merges, self.apply_rotations, self.apply_targets, self.check_won] +             # clean up pistons
-            [self.reset_wiring_network, self.apply_resource_extractors, self.apply_translations],       # main motion step
-            [self.apply_merges, self.apply_sensors, self.resolve_wiring_network, self.apply_pistons]    # 'reactive' electronics and whatnot step
+            [
+                self.apply_merges, self.apply_rotations, self.apply_targets, self.check_won,            # clean up pistons
+                self.reset_wiring_network, self.apply_resource_extractors, self.apply_translations      # main motion step
+                # self.apply_resource_extractors, self.apply_translations                                 # main motion step (no wiring reset)
+            ], [
+                self.apply_merges, self.apply_sensors, self.resolve_wiring_network, self.apply_pistons  # 'reactive' electronics and whatnot step
+            ]
         ]
         self.current_substep = 0
     
@@ -265,7 +273,12 @@ class Level:
         for pos, e in list(self.board.get_all(filter_type=Sensor)):
             target_cell = self.board.get(*(pos + e.orientation))
             e.activated = any(isinstance(d, e.target_entity_type) for d in target_cell)
-            assert(e.activated is not None)
+            # assert(e.activated is not None)
+        
+        for pos, e in list(self.board.get_all(filter_type=PressurePlate)):
+            target_cell = self.board.get(*pos)
+            e.activated = any(isinstance(d, e.target_entity_type) for d in target_cell)
+            # assert(e.activated is not None)
 
 
     def apply_pistons(self):        
@@ -297,9 +310,12 @@ class Level:
     
     def reset_wiring_network(self):
         for _, e in list(self.board.get_all(filter_type=Wirable)):
-            e.clear_ports()
+            e.clear_ports_states()
 
-    def resolve_wiring_network(self):       
+    def resolve_wiring_network(self):
+        for _, e in list(self.board.get_all(filter_type=Wirable)):
+            e.clear_ports_visited()
+
         for _, e in list(self.board.get_all(filter_type=Wirable)):
             for i in range(len(e.port_states)):
                 e.resolve_port(i)
