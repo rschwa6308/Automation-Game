@@ -198,6 +198,8 @@ class Level:
         self.step_count = 0
         self.won = False
 
+        # NOTE: moving `self.reset_wiring_network` to be immediately before `self.resolve_wiring_network` leaves the wires on for longer
+        # not sure if it looks better or worse
         self.substeps = [
             [self.apply_merges, self.apply_rotations, self.apply_targets, self.check_won] +             # clean up pistons
             [self.reset_wiring_network, self.apply_resource_extractors, self.apply_translations],       # main motion step
